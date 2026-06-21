@@ -1,8 +1,12 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { User } from '@/users/entities/user.entity';
+import { User } from './entities/user.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
@@ -12,8 +16,9 @@ export class UsersService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
+
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const { email, password } = createUserDto;
+    const { email, password, name, username } = createUserDto;
 
     // 1. Vérifier si l'utilisateur existe déjà
     const existingUser = await this.userRepository.findOne({
@@ -31,24 +36,62 @@ export class UsersService {
     const newUser = this.userRepository.create({
       email,
       password: hashedPassword,
+      name,
+      username,
     });
 
     return this.userRepository.save(newUser);
   }
 
-  findAll() {
-    return `This action returns all users`;
+  // --- MÉTHODES REQUISES POUR L'AUTHENTIFICATION (JWT & REFRESH) ---
+
+  // Corrigé en 'number' pour correspondre aux contraintes de la clé primaire TypeORM
+  async findById(id: number): Promise<User | null> {
+    return this.userRepository.findOne({ where: { id } });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { email } });
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  // Corrigé en 'number' pour matcher l'ID de la relation
+  async updateRefreshToken(
+    userId: number,
+    hashedRefreshToken: string | null,
+  ): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Utilisateur introuvable');
+    }
+
+    user.hashedRefreshToken = hashedRefreshToken;
+    await this.userRepository.save(user);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  // --- AUTRES MÉTHODES CRUD (TYPÉES EN NUMBER) ---
+
+  findAll(): Promise<User[]> {
+    return this.userRepository.find();
+  }
+
+  async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
+    const user = await this.findById(id);
+    if (!user) {
+      throw new NotFoundException(
+        `L'utilisateur avec l'ID #${id} n'existe pas.`,
+      );
+    }
+
+    const updatedUser = this.userRepository.merge(user, updateUserDto);
+    return this.userRepository.save(updatedUser);
+  }
+
+  async remove(id: number): Promise<void> {
+    const result = await this.userRepository.delete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException(
+        `L'utilisateur avec l'ID #${id} n'existe pas.`,
+      );
+    }
   }
 }

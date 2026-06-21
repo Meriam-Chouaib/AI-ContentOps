@@ -16,6 +16,15 @@ export class User {
   @Column()
   password: string;
 
+  @Column()
+  username: string;
+
+  @Column()
+  name: string;
+
+  @Column({ name: 'hashed_refresh_token', type: 'varchar', nullable: true })
+  hashedRefreshToken!: string | null;
+
   @Column({ default: 10 })
   credits: number;
 

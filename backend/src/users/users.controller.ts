@@ -27,16 +27,19 @@ export class UsersController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.usersService.findOne(+id);
+    // 🚀 Correction : Appel de findById (au lieu de findOne) avec conversion en number via '+'
+    return this.usersService.findById(+id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    // 🚀 Conversion en number via '+' pour correspondre à la signature de la méthode update
     return this.usersService.update(+id, updateUserDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
+    // 🚀 Conversion en number via '+' pour correspondre à la signature de la méthode remove
     return this.usersService.remove(+id);
   }
 }
