@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config'; // 🚀 Importatio
 import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { RefreshTokenStrategy } from './strategies/jwt-refresh.strategy';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -13,11 +15,11 @@ import { UsersModule } from '../users/users.module';
       inject: [ConfigService], // Injecte le service de configuration
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('ACCESS_SECRET_KEY'), // 🚀 Utilisation de la variable .env
-        signOptions: { expiresIn: '1h' },
+        signOptions: { expiresIn: '15m' },
       }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, JwtStrategy, RefreshTokenStrategy],
 })
 export class AuthModule {}

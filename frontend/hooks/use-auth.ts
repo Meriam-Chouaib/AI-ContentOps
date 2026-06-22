@@ -10,33 +10,27 @@ interface UserProfile {
 }
 
 export function useAuth() {
-  // SWR récupère le profil si un access_token existe en localStorage
+  // SWR récupère le profil côté client; authentication uses httpOnly cookies
   const {
     data: user,
     error,
     isLoading,
   } = useSWR<UserProfile>(
-    typeof window !== 'undefined' && localStorage.getItem('access_token')
-      ? '/auth/profile'
-      : null,
+    typeof window !== 'undefined' ? '/auth/profile' : null,
     (url: string) => apiRequest<UserProfile>(url, { method: 'GET' }),
     {
-      shouldRetryOnError: false, // Évite de boucler si le token est mort, l'intercepteur fetch gère le refresh
-      revalidateOnFocus: true, // Re-vérifie les crédits si l'utilisateur change d'onglet
+      shouldRetryOnError: false, // Fetch wrapper gère le refresh
+      revalidateOnFocus: true,
     },
   )
 
   const login = async (credentials: Record<string, string>) => {
-    const data = await apiRequest<{ accessToken: string; user: UserProfile }>(
-      '/auth/login',
-      {
-        method: 'POST',
-        body: credentials,
-      },
-    )
+    const data = await apiRequest<{ user: UserProfile }>('/auth/login', {
+      method: 'POST',
+      body: credentials,
+    })
 
-    localStorage.setItem('access_token', data.accessToken)
-    // On met à jour le cache local de SWR instantanément
+    // Mise à jour du cache SWR avec l'utilisateur retourné côté serveur
     await mutate('/auth/profile', data.user, false)
   }
 
@@ -46,7 +40,6 @@ export function useAuth() {
     } catch {
       // On ignore l'erreur backend si la session est déjà détruite
     } finally {
-      localStorage.removeItem('access_token')
       await mutate('/auth/profile', null, false)
       window.location.href = '/login'
     }

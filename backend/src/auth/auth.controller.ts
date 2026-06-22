@@ -12,6 +12,7 @@ import {
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
+import { Get } from '@nestjs/common';
 
 @Controller('auth')
 export class AuthController {
@@ -27,6 +28,14 @@ export class AuthController {
     const { user, accessToken, refreshToken } =
       await this.authService.validateUser(loginDto);
 
+    // Set httpOnly cookies for both access and refresh tokens.
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -34,7 +43,14 @@ export class AuthController {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return { accessToken, user };
+    res.cookie('last_active', Date.now().toString(), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+
+    // We avoid returning tokens in the response body to keep them out of JS.
+    return { user };
   }
 
   @UseGuards(AuthGuard('jwt-refresh'))
@@ -49,6 +65,14 @@ export class AuthController {
       currentRefreshToken,
     );
 
+    // Rotate cookies: set new short-lived access token and new refresh token
+    res.cookie('access_token', tokens.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
     res.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -56,6 +80,28 @@ export class AuthController {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return { accessToken: tokens.accessToken };
+    res.cookie('last_active', Date.now().toString(), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+
+    return { ok: true };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('profile')
+  getProfile(@Req() req: Request) {
+    // Le JwtStrategy place l'utilisateur dans req.user
+    return { user: req['user'] };
+  }
+
+  @Post('logout')
+  async logout(@Res({ passthrough: true }) res: Response) {
+    // Supprime les cookies côté serveur
+    res.clearCookie('access_token');
+    res.clearCookie('refresh_token');
+    res.clearCookie('last_active');
+    return { ok: true };
   }
 }
