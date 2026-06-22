@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config'; // 🚀 Required for secure env vars
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 
@@ -12,52 +13,47 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService, // 🚀 Injected
   ) {}
 
-  // 🚀 CORRECTION : Ajout de la méthode attendue par le contrôleur
   async validateUser(loginDto: any) {
-    console.log('🚀 ~ AuthService ~ validateUser ~ loginDto:', loginDto);
     const { email, password } = loginDto;
 
-    // 1. Chercher l'utilisateur par son email
+    // 1. Find user
     const user = await this.usersService.findByEmail(email);
     if (!user) {
-      throw new UnauthorizedException('Identifiants invalides');
+      throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 2. Vérifier si le mot de passe correspond au hash en BDD
+    // 2. Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw new UnauthorizedException('Identifiants invalides');
+      throw new UnauthorizedException('Invalid credentials');
     }
 
-    // 3. Générer la paire de tokens (Access + Refresh)
+    // 3. Generate tokens
     const tokens = await this.generateTokens(user.id, user.email);
 
-    // 4. Stocker le hash du refresh token pour le mécanisme de rotation sécurisé
+    // 4. Update refresh token in DB
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
-    // 5. Retourner les données attendues par le contrôleur
     return {
       user: { id: user.id, email: user.email },
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      ...tokens,
     };
   }
 
-  // --- MÉTHODES DE GESTION DES TOKENS TOURNANTS ---
-
   async generateTokens(userId: number, email: string) {
-    // Payload épuré sans propriété manquante (id + email)
     const payload = { sub: userId, email };
 
+    // 🚀 Using ConfigService instead of process.env directly
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: process.env.JWT_ACCESS_SECRET || 'ACCESS_SECRET_KEY',
-        expiresIn: '15m',
+        secret: this.configService.get<string>('ACCESS_SECRET_KEY'),
+        expiresIn: '15m', // Short-lived access token for security
       }),
       this.jwtService.signAsync(payload, {
-        secret: process.env.JWT_REFRESH_SECRET || 'REFRESH_SECRET_KEY',
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET_KEY'),
         expiresIn: '7d',
       }),
     ]);
@@ -72,17 +68,22 @@ export class AuthService {
 
   async refreshTokens(userId: number, refreshToken: string) {
     const user = await this.usersService.findById(userId);
+
+    // Check if user exists and has a refresh token registered
     if (!user || !user.hashedRefreshToken) {
-      throw new ForbiddenException('Accès refusé');
+      throw new ForbiddenException('Access denied');
     }
 
+    // Validate the provided refresh token against the hash in DB
     const matches = await bcrypt.compare(refreshToken, user.hashedRefreshToken);
     if (!matches) {
-      throw new ForbiddenException('Token invalide ou expiré');
+      throw new ForbiddenException('Access denied');
     }
 
+    // Rotate tokens
     const tokens = await this.generateTokens(user.id, user.email);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
+
     return tokens;
   }
 }
