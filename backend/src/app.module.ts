@@ -6,6 +6,8 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from '@/auth/auth.module';
 import { SessionInactivityMiddleware } from './auth/middlewares/session-inactivity.middleware';
 import { ConfigModule } from '@nestjs/config'; // 🚀 Import
+import { BullModule } from '@nestjs/bullmq';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -22,8 +24,15 @@ import { ConfigModule } from '@nestjs/config'; // 🚀 Import
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    BullModule.forRoot({
+      connection: {
+        host: '127.0.0.1',
+        port: 6379,
+      },
+    }),
     UsersModule,
     AuthModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
