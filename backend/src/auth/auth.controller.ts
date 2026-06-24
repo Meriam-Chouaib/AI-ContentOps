@@ -16,7 +16,7 @@ import { Get } from '@nestjs/common';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @HttpCode(HttpStatus.OK)
   @Post('login')
@@ -92,8 +92,8 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Get('profile')
   getProfile(@Req() req: Request) {
-    // Le JwtStrategy place l'utilisateur dans req.user
-    return { user: req['user'] };
+    // Return the user object directly without the { user: ... } wrapper
+    return req['user'];
   }
 
   @Post('logout')
