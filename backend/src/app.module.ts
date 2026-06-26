@@ -8,6 +8,8 @@ import { SessionInactivityMiddleware } from './auth/middlewares/session-inactivi
 import { ConfigModule } from '@nestjs/config'; // 🚀 Import
 import { BullModule } from '@nestjs/bullmq';
 import { AiModule } from './ai/ai.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 @Module({
   imports: [
@@ -29,6 +31,10 @@ import { AiModule } from './ai/ai.module';
         host: '127.0.0.1',
         port: 6379,
       },
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'uploads'),
+      serveRoot: '/uploads',
     }),
     UsersModule,
     AuthModule,

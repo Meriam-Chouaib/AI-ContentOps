@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config'; // 🚀 Required for secure env vars
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
+import { Request } from 'express';
 
 @Injectable()
 export class AuthService {
@@ -14,7 +15,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService, // 🚀 Injected
-  ) {}
+  ) { }
 
   async validateUser(loginDto: any) {
     const { email, password } = loginDto;
@@ -42,7 +43,10 @@ export class AuthService {
       ...tokens,
     };
   }
-
+  async getUserConnected(req: Request) {
+    const userId = (req.user as any).id;
+    return this.usersService.findById(userId);
+  }
   async generateTokens(userId: number, email: string) {
     const payload = { sub: userId, email };
 

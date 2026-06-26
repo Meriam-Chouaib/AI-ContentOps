@@ -28,6 +28,18 @@ export class User {
   @Column({ default: 10 })
   credits: number;
 
+  @Column({ type: 'date', nullable: true })
+  birthday: Date | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  address: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  phoneNumber: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  profilePictureUrl: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -9,6 +9,7 @@ import {
   LogOut,
   ChevronRight,
   Zap,
+  User
 } from 'lucide-react'
 
 interface NavItem {
@@ -20,6 +21,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Campaigns', href: '/dashboard/campaigns', icon: Sparkles },
+  { label: 'Profile', href: '/dashboard/profile', icon: User },
 ]
 
 interface DashboardLayoutProps {
@@ -55,11 +57,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
-                  isActive
-                    ? 'bg-violet-500/15 text-violet-300 border border-violet-500/20'
-                    : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
-                }`}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${isActive
+                  ? 'bg-violet-500/15 text-violet-300 border border-violet-500/20'
+                  : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
+                  }`}
               >
                 <Icon
                   className={`w-4 h-4 ${isActive ? 'text-violet-400' : 'text-slate-500 group-hover:text-slate-300'}`}
