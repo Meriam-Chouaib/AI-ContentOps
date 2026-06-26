@@ -6,7 +6,12 @@ import { apiRequest } from '../services/api.service'
 interface UserProfile {
   id: number
   email: string
+  name: string
   credits: number // Déjà aligné avec l'US-04 (Système de crédits MySQL)
+  birthday?: string
+  address?: string
+  phoneNumber?: string
+  profilePictureUrl?: string
 }
 
 export function useAuth() {

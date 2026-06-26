@@ -93,7 +93,7 @@ export class AuthController {
   @Get('profile')
   getProfile(@Req() req: Request) {
     // Return the user object directly without the { user: ... } wrapper
-    return req['user'];
+    return this.authService.getUserConnected(req);
   }
 
   @Post('logout')

@@ -15,7 +15,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-  ) {}
+  ) { }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     const { email, password, name, username } = createUserDto;
@@ -75,6 +75,7 @@ export class UsersService {
   }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
+    console.log("🚀 ~ UsersService ~ update ~ updateUserDto:", updateUserDto)
     const user = await this.findById(id);
     if (!user) {
       throw new NotFoundException(
@@ -83,6 +84,7 @@ export class UsersService {
     }
 
     const updatedUser = this.userRepository.merge(user, updateUserDto);
+    console.log("🚀 ~ UsersService ~ update ~ updatedUser:", updatedUser)
     return this.userRepository.save(updatedUser);
   }
 
