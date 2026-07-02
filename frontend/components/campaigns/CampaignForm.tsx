@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { Send, CheckCircle2, Loader2 } from 'lucide-react'
 import { Toast, ToastState } from '@/components/ui/Toast'
 import { FormSkeleton } from '@/components/ui/Skeleton'
+import { useAuth } from '@/hooks/use-auth'
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,8 @@ function SuccessCard({ jobId, onReset }: { jobId: string; onReset: () => void })
 // ─── Main Form ─────────────────────────────────────────────────────────────────
 
 export function CampaignForm() {
+  const { user } = useAuth()
+
   const [status, setStatus] = useState<FormStatus>('idle')
   const [jobId, setJobId] = useState<string>('')
   const [toast, setToast] = useState<ToastState>({ show: false, type: 'success', message: '' })
@@ -81,8 +84,9 @@ export function CampaignForm() {
 
     const payload = {
       subjectId: `sub-${Date.now()}`,
-      userId: `usr-dashboard`,
+      userId: user?.id.toString(),
       subject: formData.subject,
+      keywords: formData.keywords,
       createdAt: new Date().toISOString(),
     }
 
@@ -153,8 +157,7 @@ export function CampaignForm() {
                   required
                   value={formData.subject}
                   onChange={handleChange}
-                  disabled={status === 'loading'}
-                  placeholder="e.g. Explain the concept of machine learning"
+                  disabled={status === ('loading' as FormStatus)} placeholder="e.g. Explain the concept of machine learning"
                   className="w-full px-4 py-3 rounded-xl bg-white/[0.06] border border-white/10 text-white placeholder-slate-500 text-sm transition-all outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="mt-2 text-xs text-slate-500">
@@ -177,8 +180,7 @@ export function CampaignForm() {
                   rows={4}
                   value={formData.keywords}
                   onChange={handleChange}
-                  disabled={status === 'loading'}
-                  placeholder="e.g. neural networks, supervised learning, classification..."
+                  disabled={status === ('loading' as FormStatus)} placeholder="e.g. neural networks, supervised learning, classification..."
                   className="w-full px-4 py-3 rounded-xl bg-white/[0.06] border border-white/10 text-white placeholder-slate-500 text-sm transition-all outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="mt-2 text-xs text-slate-500">
@@ -189,10 +191,9 @@ export function CampaignForm() {
               {/* Submit button */}
               <button
                 type="submit"
-                disabled={status === 'loading'}
-                className="w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-lg shadow-violet-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                disabled={status === ('loading' as FormStatus)} className="w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-lg shadow-violet-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
               >
-                {status === 'loading' ? (
+                {status === ('loading' as FormStatus) ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Queuing Campaign…

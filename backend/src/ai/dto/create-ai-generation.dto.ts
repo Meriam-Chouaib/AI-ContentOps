@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsDateString } from 'class-validator';
+import { IsNotEmpty, IsString, IsDateString, IsOptional } from 'class-validator';
 
 export class CreateAiGenerationDto {
   @IsString()
@@ -12,6 +12,10 @@ export class CreateAiGenerationDto {
   @IsString()
   @IsNotEmpty()
   subject: string;
+
+  @IsOptional()
+  @IsString()
+  keywords?: string;
 
   @IsDateString()
   @IsNotEmpty()

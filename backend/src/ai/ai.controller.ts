@@ -11,11 +11,12 @@ export class AiController {
     private readonly aiProducerService: AiProducerService,
     @InjectRepository(AiGeneration)
     private readonly aiGenerationRepository: Repository<AiGeneration>,
-  ) {}
+  ) { }
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   async createSubject(@Body() createAiGenerationDto: CreateAiGenerationDto) {
+    console.log("createAiGenerationDto", createAiGenerationDto);
     const job = await this.aiProducerService.enqueueGeneration(createAiGenerationDto);
     return {
       message: 'Subject accepted for processing.',
