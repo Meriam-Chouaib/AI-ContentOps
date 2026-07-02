@@ -15,13 +15,13 @@ export class AiGeneration {
   subject: string;
 
   @Column({ type: 'text', nullable: true })
-  generatedContent: string;
+  generatedContent: string | null;
 
   @Column({ default: 'pending' })
   status: string; // pending, processing, completed, failed
 
   @Column({ type: 'text', nullable: true })
-  errorMessage: string;
+  errorMessage: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

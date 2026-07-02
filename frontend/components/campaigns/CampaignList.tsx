@@ -9,11 +9,11 @@ import {
   Loader2,
   Sparkles,
   Plus,
-  ChevronDown,
   FileText,
   AlertTriangle,
 } from 'lucide-react'
 import { AiGeneration } from './types'
+import { CampaignDetail } from './CampaignDetail'
 
 // ─── Status Config ─────────────────────────────────────────────────────────────
 
@@ -56,55 +56,14 @@ function StatusBadge({ status }: { status: AiGeneration['status'] }) {
   )
 }
 
-// ─── Accordion ─────────────────────────────────────────────────────────────────
-
-function ContentAccordion({ content }: { content: string }) {
-  const [open, setOpen] = useState(false)
-
-  // Extract summary: first non-empty line that isn't a heading marker
-  const lines = content.split('\n').filter((l) => l.trim())
-  const summary = lines.find((l) => !l.startsWith('#'))?.slice(0, 160) ?? ''
-
-  return (
-    <div className="mt-4 rounded-xl border border-white/[0.08] overflow-hidden">
-      {/* Summary always visible */}
-      <div className="px-4 py-3 bg-white/[0.03]">
-        <div className="flex items-start gap-2">
-          <FileText className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
-          <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
-            {summary}…
-          </p>
-        </div>
-      </div>
-
-      {/* Toggle button */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 bg-white/[0.02] hover:bg-white/[0.05] border-t border-white/[0.06] transition-colors text-left"
-      >
-        <span className="text-xs font-medium text-violet-400">
-          {open ? 'Hide full article' : 'Read full article'}
-        </span>
-        <ChevronDown
-          className={`w-3.5 h-3.5 text-violet-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {/* Full content */}
-      {open && (
-        <div className="px-4 py-4 bg-white/[0.02] border-t border-white/[0.06]">
-          <pre className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">
-            {content}
-          </pre>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── Campaign Card ─────────────────────────────────────────────────────────────
 
-function CampaignCard({ campaign }: { campaign: AiGeneration }) {
+interface CampaignCardProps {
+  campaign: AiGeneration
+  onClick: (campaign: AiGeneration) => void
+}
+
+function CampaignCard({ campaign, onClick }: CampaignCardProps) {
   const formattedDate = new Date(campaign.createdAt).toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -114,10 +73,13 @@ function CampaignCard({ campaign }: { campaign: AiGeneration }) {
   })
 
   return (
-    <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-5 flex flex-col gap-3 hover:bg-white/[0.06] transition-colors">
+    <button
+      onClick={() => onClick(campaign)}
+      className="w-full text-left rounded-2xl bg-white/[0.04] border border-white/10 p-5 flex flex-col gap-3 hover:bg-white/[0.07] hover:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-200 cursor-pointer group"
+    >
       {/* Top row */}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-sm font-semibold text-white leading-snug flex-1">
+        <h3 className="text-sm font-semibold text-white leading-snug flex-1 group-hover:text-violet-200 transition-colors">
           {campaign.subject}
         </h3>
         <StatusBadge status={campaign.status} />
@@ -126,16 +88,21 @@ function CampaignCard({ campaign }: { campaign: AiGeneration }) {
       {/* Date */}
       <p className="text-xs text-slate-500">{formattedDate}</p>
 
-      {/* Generated content accordion */}
+      {/* Content preview */}
       {campaign.status === 'completed' && campaign.generatedContent && (
-        <ContentAccordion content={campaign.generatedContent} />
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+          <FileText className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
+          <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
+            {campaign.generatedContent.split('\n').find((l) => l.trim() && !l.startsWith('#'))?.slice(0, 140)}…
+          </p>
+        </div>
       )}
 
       {/* Error message */}
       {campaign.status === 'failed' && campaign.errorMessage && (
         <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
           <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-          <p className="text-xs text-red-300">{campaign.errorMessage}</p>
+          <p className="text-xs text-red-300 line-clamp-2">{campaign.errorMessage}</p>
         </div>
       )}
 
@@ -154,7 +121,12 @@ function CampaignCard({ campaign }: { campaign: AiGeneration }) {
           <p className="text-xs text-amber-300">Queued — waiting to be processed</p>
         </div>
       )}
-    </div>
+
+      {/* Click hint */}
+      <p className="text-[11px] text-slate-600 group-hover:text-slate-500 transition-colors">
+        Click to view details →
+      </p>
+    </button>
   )
 }
 
@@ -188,13 +160,27 @@ interface CampaignListProps {
 }
 
 export function CampaignList({ campaigns }: CampaignListProps) {
+  const [selectedCampaign, setSelectedCampaign] = useState<AiGeneration | null>(null)
+
   if (campaigns?.length === 0) return <EmptyState />
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {campaigns.map((campaign) => (
-        <CampaignCard key={campaign.id} campaign={campaign} />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {campaigns.map((campaign) => (
+          <CampaignCard
+            key={campaign.id}
+            campaign={campaign}
+            onClick={setSelectedCampaign}
+          />
+        ))}
+      </div>
+
+      {/* Detail slide-over panel */}
+      <CampaignDetail
+        campaign={selectedCampaign}
+        onClose={() => setSelectedCampaign(null)}
+      />
+    </>
   )
 }

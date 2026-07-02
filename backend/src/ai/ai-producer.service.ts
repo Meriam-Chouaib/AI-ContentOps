@@ -9,11 +9,12 @@ export class AiProducerService {
 
   constructor(
     @InjectQueue('ai-generation') private readonly aiQueue: Queue,
-  ) {}
+  ) { }
 
   async enqueueGeneration(dto: CreateAiGenerationDto) {
+    console.log("dto", dto);
     this.logger.log(`Enqueueing job for subjectId: ${dto.subjectId}`);
-    
+
     const job = await this.aiQueue.add('generate', dto, {
       attempts: 3,
       backoff: {
