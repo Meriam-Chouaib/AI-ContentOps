@@ -121,6 +121,11 @@ export async function apiRequest<T>(
 
     // 4. Gestion fine des erreurs NestJS / Standard HTTP
     if (!response.ok) {
+      // If the backend returned a structured validation error (with an 'errors' array),
+      // serialize the whole object so callers can parse row-level details.
+      if (data && data.errors && Array.isArray(data.errors)) {
+        throw new Error(JSON.stringify(data))
+      }
       const errorMessage = data
         ? Array.isArray(data.message)
           ? data.message[0]

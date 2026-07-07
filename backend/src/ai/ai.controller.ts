@@ -8,13 +8,13 @@ import {
   HttpCode,
   HttpStatus,
   ConflictException,
-  ParseArrayPipe,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { AiProducerService } from './ai-producer.service';
 import { CreateAiGenerationDto } from './dto/create-ai-generation.dto';
 import { AiGeneration } from './entities/ai-generation.entity';
+import { BulkCampaignValidationPipe } from './pipes/bulk-campaign-validation.pipe';
 
 @Controller('subjects')
 export class AiController {
@@ -71,7 +71,7 @@ export class AiController {
   @Post('bulk')
   @HttpCode(HttpStatus.ACCEPTED)
   async createSubjectsBulk(
-    @Body(new ParseArrayPipe({ items: CreateAiGenerationDto })) 
+    @Body(new BulkCampaignValidationPipe()) 
     createAiGenerationDtos: CreateAiGenerationDto[]
   ) {
     if (!Array.isArray(createAiGenerationDtos)) {
@@ -111,6 +111,7 @@ export class AiController {
       queuedJobs.push({
         subjectId,
         jobId: job.id,
+        campaignId: aiGenRecord.id,
         duplicate: false,
       });
     }

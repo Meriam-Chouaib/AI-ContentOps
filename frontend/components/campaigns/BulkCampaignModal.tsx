@@ -8,7 +8,8 @@ import { apiRequest } from '@/services/api.service'
 
 interface BulkCampaignModalProps {
   onClose: () => void
-  onSuccess: () => void
+  /** Called with the list of newly queued campaign DB IDs */
+  onSuccess: (campaignIds: string[]) => void
 }
 
 interface ParsedRow {
@@ -22,16 +23,26 @@ export function BulkCampaignModal({ onClose, onSuccess }: BulkCampaignModalProps
   const [parsedData, setParsedData] = useState<ParsedRow[]>([])
   const [isParsing, setIsParsing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Platform normalisation map ─────────────────────────────────────────────
+  const normalizePlatform = (raw: string): string => {
+    const val = raw.trim().toLowerCase()
+    if (val === 'linkedin') return 'linkedin'
+    if (val === 'instagram' || val === 'insta') return 'insta'
+    if (val === 'facebook') return 'facebook'
+    if (val === 'tiktok' || val === 'tik tok') return 'tiktok'
+    return 'linkedin' // fallback default
+  }
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     setIsParsing(true)
-    setError(null)
+    setErrors([])
 
     const reader = new FileReader()
     reader.onload = (evt) => {
@@ -43,44 +54,55 @@ export function BulkCampaignModal({ onClose, onSuccess }: BulkCampaignModalProps
         const data = XLSX.utils.sheet_to_json(ws, { raw: false }) as any[]
 
         const validated: ParsedRow[] = []
+        const parseErrors: string[] = []
+
         for (let i = 0; i < data.length; i++) {
           const row = data[i]
-          
+          const rowNum = i + 2 // +2: header row is row 1, data starts at row 2
+
           // Case insensitive matching for headers
           const getVal = (key: string) => {
              const foundKey = Object.keys(row).find(k => k.toLowerCase().trim() === key.toLowerCase())
              return foundKey ? String(row[foundKey]).trim() : ''
           }
-          
+
           const subject = getVal('subject')
           const keywords = getVal('keywords')
-          let platform = getVal('platform')
+          const rawPlatform = getVal('platform')
+          const platform = normalizePlatform(rawPlatform)
 
-          // Auto correct platform names if possible
-          if (platform.toLowerCase() === 'linkedin') platform = 'LinkedIn'
-          else if (platform.toLowerCase() === 'instagram') platform = 'Instagram'
-          else if (platform.toLowerCase() === 'facebook') platform = 'Facebook'
-          else platform = 'LinkedIn' // Default fallback
-
-          if (subject) {
-            validated.push({ subject, keywords, platform })
+          if (!subject) {
+            parseErrors.push(`Row ${rowNum}: 'subject' cannot be empty.`)
+            continue
           }
+          if (!rawPlatform) {
+            parseErrors.push(`Row ${rowNum}: 'platform' cannot be empty. Use linkedin, insta, facebook, or tiktok.`)
+            continue
+          }
+
+          validated.push({ subject, keywords, platform })
         }
 
-        if (validated.length === 0) {
-          setError('No valid rows found. Ensure you have a "subject" column.')
+        if (parseErrors.length > 0 && validated.length === 0) {
+          setErrors(parseErrors)
+        } else if (parseErrors.length > 0) {
+          // Show errors but also show valid rows
+          setErrors(parseErrors)
+          setParsedData(validated)
+        } else if (validated.length === 0) {
+          setErrors(['No valid rows found. Ensure you have a "subject" column with content.'])
         } else {
           setParsedData(validated)
         }
       } catch (err: any) {
-        setError('Failed to parse file: ' + err.message)
+        setErrors(['Failed to parse file: ' + err.message])
       } finally {
         setIsParsing(false)
         if (fileInputRef.current) fileInputRef.current.value = ''
       }
     }
     reader.onerror = () => {
-      setError('File read error.')
+      setErrors(['File read error. Please try again.'])
       setIsParsing(false)
     }
     reader.readAsBinaryString(file)
@@ -89,7 +111,7 @@ export function BulkCampaignModal({ onClose, onSuccess }: BulkCampaignModalProps
   const handleSubmit = async () => {
     if (!parsedData.length || !user) return
     setIsSubmitting(true)
-    setError(null)
+    setErrors([])
 
     const payload = parsedData.map(row => {
       const subjectId = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -104,13 +126,28 @@ export function BulkCampaignModal({ onClose, onSuccess }: BulkCampaignModalProps
     })
 
     try {
-      await apiRequest('/subjects/bulk', {
+      const result = await apiRequest<{ jobs: { campaignId?: string; jobId: string }[]; message: string }>('/subjects/bulk', {
         method: 'POST',
         body: payload,
       })
-      onSuccess()
+      // Collect the DB UUIDs returned per-job so the parent can poll them
+      const ids = (result.jobs ?? []).map((j) => j.campaignId).filter(Boolean) as string[]
+      onSuccess(ids)
     } catch (err: any) {
-      setError(err.message || 'Failed to submit bulk request.')
+      // The backend returns { message: 'Validation Error', errors: string[] }
+      // for row-level errors. Parse and display each one.
+      let displayErrors: string[]
+      try {
+        const parsed = JSON.parse(err.message)
+        if (parsed?.errors && Array.isArray(parsed.errors)) {
+          displayErrors = parsed.errors
+        } else {
+          displayErrors = [err.message || 'Failed to submit bulk request.']
+        }
+      } catch {
+        displayErrors = [err.message || 'Failed to submit bulk request.']
+      }
+      setErrors(displayErrors)
       setIsSubmitting(false)
     }
   }
@@ -138,7 +175,7 @@ export function BulkCampaignModal({ onClose, onSuccess }: BulkCampaignModalProps
         {/* Content */}
         <div className="flex-1 overflow-auto p-6 flex flex-col gap-6">
           <p className="text-sm text-slate-400">
-            Upload an Excel (.xlsx) or CSV file with the following headers: <strong>subject</strong>, <strong>keywords</strong>, <strong>platform</strong>. The platform should be LinkedIn, Instagram, or Facebook.
+            Upload an Excel (.xlsx) or CSV file with the following headers: <strong>subject</strong>, <strong>keywords</strong>, <strong>platform</strong>. The platform should be one of: <strong className="text-violet-400">linkedin, insta, facebook, tiktok</strong>.
           </p>
 
           <input 
@@ -171,9 +208,17 @@ export function BulkCampaignModal({ onClose, onSuccess }: BulkCampaignModalProps
             </div>
           )}
 
-          {error && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-              {error}
+          {errors.length > 0 && (
+            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+              <p className="text-red-400 text-sm font-semibold mb-2">Validation Errors</p>
+              <ul className="space-y-1">
+                {errors.map((e, i) => (
+                  <li key={i} className="text-red-400 text-xs flex items-start gap-1.5">
+                    <span className="mt-0.5 shrink-0">•</span>
+                    <span>{e}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

@@ -23,13 +23,13 @@ export class OpenAiService implements AiService {
 
     let systemPrompt = 'You are an expert educational content writer. Always produce clear, engaging, well-structured articles in Markdown format with headings, bullet points, and a conclusion.';
 
-    if (platform === 'LinkedIn') {
+    if (platform === 'linkedin') {
       systemPrompt = 'You are an expert B2B copywriter for LinkedIn. Write professional, insightful, and engaging posts. Adapt your tone, structure, and length guidelines specifically for LinkedIn: use clean formatting, emojis where appropriate, keep sentences punchy, use short paragraphs for readability, and add a clear call-to-action or thought-provoking question at the end to drive engagement.';
-    } else if (platform === 'Instagram') {
+    } else if (platform === 'insta') {
       systemPrompt = 'You are a social media expert for Instagram. Write visually engaging, trendy, and concise captions. Adapt your tone, structure, and length guidelines specifically for Instagram: use engaging hooks in the first sentence, line breaks for readability, appropriate and expressive emojis throughout, keep the text relatively concise, and include relevant hashtags at the end.';
-    } else if (platform === 'Facebook') {
+    } else if (platform === 'facebook') {
       systemPrompt = 'You are a community manager for Facebook. Write conversational, community-focused, and highly shareable posts. Adapt your tone, structure, and length guidelines specifically for Facebook: use a friendly and relatable tone, ask questions to encourage comments, and use formatting like bullet points or emojis to make it easy to read.';
-    } else if (platform === 'Tiktok' || platform === 'TikTok') {
+    } else if (platform === 'tiktok') {
       systemPrompt = 'You are a viral TikTok creator and scriptwriter. Write highly engaging, short-form video scripts and punchy captions. Adapt your tone, structure, and length guidelines specifically for TikTok: start with a strong 3-second verbal hook, use fast-paced and concise storytelling, include visual cues or text-on-screen suggestions, and keep the final caption short with 3-5 trending hashtags.';
     }
 

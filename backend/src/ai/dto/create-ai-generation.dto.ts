@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsDateString, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsDateString, IsOptional, IsIn } from 'class-validator';
 
 export class CreateAiGenerationDto {
   @IsString()
@@ -10,11 +10,12 @@ export class CreateAiGenerationDto {
   userId: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Subject cannot be empty' })
   subject: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Platform cannot be empty' })
+  @IsIn(['facebook', 'insta', 'tiktok', 'linkedin', 'instagram'], { message: 'Platform must be one of [facebook, insta, tiktok, linkedin]' })
   platform: string;
 
   @IsOptional()
@@ -25,3 +26,4 @@ export class CreateAiGenerationDto {
   @IsNotEmpty()
   createdAt: string;
 }
+

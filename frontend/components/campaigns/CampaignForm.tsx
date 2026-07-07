@@ -54,7 +54,7 @@ export function CampaignForm({ onSuccess, onFinished }: CampaignFormProps) {
   const [polledCampaign, setPolledCampaign] = useState<AiGeneration | null>(null)
 
   const [toast, setToast] = useState<ToastState>({ show: false, type: 'success', message: '' })
-  const [formData, setFormData] = useState<CampaignFormData>({ subject: '', keywords: '', platform: 'LinkedIn' })
+  const [formData, setFormData] = useState<CampaignFormData>({ subject: '', keywords: '', platform: 'linkedin' })
 
   // ── Submission lock ─────────────────────────────────────────────────────────
   // A ref-based flag (not state) prevents duplicate submissions even before
@@ -170,7 +170,7 @@ export function CampaignForm({ onSuccess, onFinished }: CampaignFormProps) {
     setJobId('')
     setCampaignId('')
     setPolledCampaign(null)
-    setFormData({ subject: '', keywords: '', platform: 'LinkedIn' })
+    setFormData({ subject: '', keywords: '', platform: 'linkedin' })
   }
 
   const isLoading = status === 'loading'
@@ -239,10 +239,10 @@ export function CampaignForm({ onSuccess, onFinished }: CampaignFormProps) {
                 </label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { id: 'LinkedIn', icon: FaLinkedin, label: 'LinkedIn' },
-                    { id: 'Instagram', icon: FaInstagram, label: 'Instagram' },
-                    { id: 'Facebook', icon: FaFacebook, label: 'Facebook' },
-                    { id: 'Tiktok', icon: FaTiktok, label: 'TikTok' },
+                    { id: 'linkedin', icon: FaLinkedin, label: 'LinkedIn' },
+                    { id: 'insta', icon: FaInstagram, label: 'Instagram' },
+                    { id: 'facebook', icon: FaFacebook, label: 'Facebook' },
+                    { id: 'tiktok', icon: FaTiktok, label: 'TikTok' },
                   ].map(({ id, icon: Icon, label }) => {
                     const isSelected = formData.platform === id
                     return (
