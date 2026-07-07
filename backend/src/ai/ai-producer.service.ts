@@ -16,6 +16,7 @@ export class AiProducerService {
     this.logger.log(`Enqueueing job for subjectId: ${dto.subjectId}`);
 
     const job = await this.aiQueue.add('generate', dto, {
+      jobId: dto.subjectId, // Use subjectId to deduplicate jobs in the queue
       attempts: 3,
       backoff: {
         type: 'exponential',

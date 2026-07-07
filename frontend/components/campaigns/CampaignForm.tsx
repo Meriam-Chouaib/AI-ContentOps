@@ -1,24 +1,38 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Send, CheckCircle2, Loader2 } from 'lucide-react'
+import { FaLinkedin, FaInstagram, FaFacebook } from 'react-icons/fa';
+import { Send, CheckCircle2, Loader2 } from 'lucide-react';
 import { Toast, ToastState } from '@/components/ui/Toast'
 import { FormSkeleton } from '@/components/ui/Skeleton'
 import { useAuth } from '@/hooks/use-auth'
+import { apiRequest } from '@/services/api.service'
+import { AiGeneration } from '@/components/campaigns/types'
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
 interface CampaignFormData {
   subject: string
   keywords: string
+  platform: string
 }
 
 interface ApiResponse {
   message: string
   jobId: string
+  duplicate?: boolean
 }
 
 type FormStatus = 'idle' | 'loading' | 'success' | 'error'
+
+interface CampaignFormProps {
+  /**
+   * Called immediately after a successful 202 response.
+   * Receives an optimistic AiGeneration record so the dashboard can prepend it
+   * to the list without waiting for the next poll.
+   */
+  onSuccess?: (campaign: AiGeneration) => void
+}
 
 // ─── Success Card ──────────────────────────────────────────────────────────────
 
@@ -32,7 +46,8 @@ function SuccessCard({ jobId, onReset }: { jobId: string; onReset: () => void })
         Campaign Queued Successfully!
       </h3>
       <p className="text-slate-400 text-sm mb-4 max-w-xs">
-        Your subject is being processed by the AI engine in the background.
+        Your subject is being processed by the AI engine. The dashboard will
+        update automatically when it&apos;s ready.
       </p>
       <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 mb-8">
         <span className="text-xs text-slate-500 font-medium">Job ID: </span>
@@ -52,13 +67,19 @@ function SuccessCard({ jobId, onReset }: { jobId: string; onReset: () => void })
 
 // ─── Main Form ─────────────────────────────────────────────────────────────────
 
-export function CampaignForm() {
+export function CampaignForm({ onSuccess }: CampaignFormProps) {
   const { user } = useAuth()
 
   const [status, setStatus] = useState<FormStatus>('idle')
   const [jobId, setJobId] = useState<string>('')
   const [toast, setToast] = useState<ToastState>({ show: false, type: 'success', message: '' })
-  const [formData, setFormData] = useState<CampaignFormData>({ subject: '', keywords: '' })
+  const [formData, setFormData] = useState<CampaignFormData>({ subject: '', keywords: '', platform: 'LinkedIn' })
+
+  // ── Submission lock ─────────────────────────────────────────────────────────
+  // A ref-based flag (not state) prevents duplicate submissions even before
+  // React has re-rendered the disabled button. This guards against rapid
+  // double-clicks and React StrictMode double-invocations in development.
+  const submittingRef = useRef(false)
 
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -68,56 +89,89 @@ export function CampaignForm() {
     toastTimeoutRef.current = setTimeout(() => setToast((t) => ({ ...t, show: false })), 5000)
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
+    // ── Guard: prevent duplicate submissions ──────────────────────────────────
+    if (submittingRef.current) return
+    submittingRef.current = true
+
     if (!formData.subject.trim()) {
       showToast('error', 'Subject is required.')
+      submittingRef.current = false
       return
     }
 
     setStatus('loading')
 
+    // Generate the subjectId once — it acts as the idempotency key sent to the
+    // backend. Generating it here (not inside render) means rapid re-submissions
+    // always carry the same key, and the backend idempotency guard handles the rest.
+    const subjectId = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+
     const payload = {
-      subjectId: `sub-${Date.now()}`,
+      subjectId,
       userId: user?.id.toString(),
-      subject: formData.subject,
+      subject: formData.subject.trim(),
       keywords: formData.keywords,
+      platform: formData.platform,
       createdAt: new Date().toISOString(),
     }
 
     try {
-      const response = await fetch('http://localhost:3001/subjects', {
+      const data = await apiRequest<ApiResponse>('/subjects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: payload,
       })
 
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({ message: 'Unknown error' }))
-        throw new Error(errorBody.message || `HTTP ${response.status}`)
-      }
-
-      const data: ApiResponse = await response.json()
       setJobId(data.jobId)
       setStatus('success')
-      showToast('success', `Campaign accepted! Job #${data.jobId} is being processed.`)
+      showToast(
+        'success',
+        data.duplicate
+          ? `Campaign already queued! Job #${data.jobId} is being processed.`
+          : `Campaign accepted! Job #${data.jobId} is being processed.`,
+      )
+
+      // Notify the parent dashboard immediately so it can prepend an optimistic
+      // 'processing' card without waiting for the next poll cycle.
+      if (onSuccess && user) {
+        const optimisticCampaign: AiGeneration = {
+          // We don't have the DB UUID yet — use subjectId as a temporary id.
+          // The next poll will replace this with the real record from the server.
+          id: subjectId,
+          subjectId,
+          userId: user.id.toString(),
+          subject: formData.subject.trim(),
+          platform: formData.platform,
+          status: 'processing',
+          generatedContent: null,
+          errorMessage: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        onSuccess(optimisticCampaign)
+      }
     } catch (err: any) {
       setStatus('error')
       showToast('error', err.message || 'Failed to submit campaign. Check your connection.')
       setStatus('idle')
+    } finally {
+      submittingRef.current = false
     }
   }
 
   const handleReset = () => {
     setStatus('idle')
     setJobId('')
-    setFormData({ subject: '', keywords: '' })
+    setFormData({ subject: '', keywords: '', platform: 'LinkedIn' })
   }
+
+  const isLoading = status === 'loading'
 
   return (
     <>
@@ -135,7 +189,7 @@ export function CampaignForm() {
 
         {/* Card body */}
         <div className="px-8 py-8">
-          {status === 'loading' ? (
+          {isLoading ? (
             <FormSkeleton />
           ) : status === 'success' ? (
             <SuccessCard jobId={jobId} onReset={handleReset} />
@@ -157,11 +211,55 @@ export function CampaignForm() {
                   required
                   value={formData.subject}
                   onChange={handleChange}
-                  disabled={status === ('loading' as FormStatus)} placeholder="e.g. Explain the concept of machine learning"
+                  disabled={isLoading}
+                  placeholder="e.g. Explain the concept of machine learning"
                   className="w-full px-4 py-3 rounded-xl bg-white/[0.06] border border-white/10 text-white placeholder-slate-500 text-sm transition-all outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="mt-2 text-xs text-slate-500">
                   The main topic you want AI-generated educational content about.
+                </p>
+              </div>
+
+              {/* Target Platform field */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2">
+                  Target Platform
+                  <span className="text-violet-400 ml-1">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { id: 'LinkedIn', icon: FaLinkedin, label: 'LinkedIn' },
+                    { id: 'Instagram', icon: FaInstagram, label: 'Instagram' },
+                    { id: 'Facebook', icon: FaFacebook, label: 'Facebook' },
+                  ].map(({ id, icon: Icon, label }) => {
+                    const isSelected = formData.platform === id
+                    return (
+                      <label
+                        key={id}
+                        className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${isSelected
+                          ? 'bg-violet-500/10 border-violet-500/50 shadow-md shadow-violet-500/10'
+                          : 'bg-white/[0.04] border-white/10 hover:bg-white/[0.08] hover:border-white/20'
+                          } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          name="platform"
+                          value={id}
+                          checked={isSelected}
+                          onChange={handleChange}
+                          disabled={isLoading}
+                          className="sr-only"
+                        />
+                        <Icon className={`w-6 h-6 ${isSelected ? 'text-violet-400' : 'text-slate-400'}`} />
+                        <span className={`text-xs font-medium ${isSelected ? 'text-violet-300' : 'text-slate-400'}`}>
+                          {label}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Select the platform to tailor the post's format and tone.
                 </p>
               </div>
 
@@ -180,7 +278,8 @@ export function CampaignForm() {
                   rows={4}
                   value={formData.keywords}
                   onChange={handleChange}
-                  disabled={status === ('loading' as FormStatus)} placeholder="e.g. neural networks, supervised learning, classification..."
+                  disabled={isLoading}
+                  placeholder="e.g. neural networks, supervised learning, classification..."
                   className="w-full px-4 py-3 rounded-xl bg-white/[0.06] border border-white/10 text-white placeholder-slate-500 text-sm transition-all outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="mt-2 text-xs text-slate-500">
@@ -190,10 +289,12 @@ export function CampaignForm() {
 
               {/* Submit button */}
               <button
+                id="campaign-submit-btn"
                 type="submit"
-                disabled={status === ('loading' as FormStatus)} className="w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-lg shadow-violet-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-2.5 py-3.5 px-6 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-lg shadow-violet-500/25 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
               >
-                {status === ('loading' as FormStatus) ? (
+                {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     Queuing Campaign…

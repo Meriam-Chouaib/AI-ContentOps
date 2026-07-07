@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/use-auth'
+import { useCampaigns } from '@/hooks/use-campaigns'
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout'
 import { CampaignList } from '@/components/campaigns/CampaignList'
-import { mockCampaigns } from '@/components/campaigns/mockCampaigns'
-import { apiRequest } from '@/services/api.service'
+import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
 import { AiGeneration } from '@/components/campaigns/types'
 import { Toast, ToastState } from '@/components/ui/Toast'
 import { GridSkeleton } from '@/components/ui/Skeleton'
@@ -14,66 +14,73 @@ import {
   Plus,
   AlertCircle,
   RefreshCw,
-  Loader2,
 } from 'lucide-react'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type FetchState = 'loading' | 'success' | 'error'
-
 // ─── Main Page ─────────────────────────────────────────────────────────────────
-
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_AI === 'true'
-
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth()
 
-  const [campaigns, setCampaigns] = useState<AiGeneration[]>([])
-  const [fetchState, setFetchState] = useState<FetchState>('loading')
-  const [toast, setToast] = useState<ToastState>({ show: false, type: 'error', message: '' })
-  const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const showToast = (type: 'success' | 'error', message: string) => {
-    if (toastRef.current) clearTimeout(toastRef.current)
+  // ── Toast ───────────────────────────────────────────────────────────────────
+  const [toast, setToast] = useState<ToastState>({ show: false, type: 'success', message: '' })
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
     setToast({ show: true, type, message })
-    toastRef.current = setTimeout(() => setToast((t) => ({ ...t, show: false })), 5000)
-  }
+    setTimeout(() => setToast((t) => ({ ...t, show: false })), 5000)
+  }, [])
 
-  const fetchCampaigns = async (userId: string) => {
-    setFetchState('loading')
+  // ── Selected campaign (controls the detail modal) ───────────────────────────
+  const [selectedCampaign, setSelectedCampaign] = useState<AiGeneration | null>(null)
 
-    // ── Mock mode: return fake data instantly ─────────────────────────────────
-    if (USE_MOCK) {
-      await new Promise((r) => setTimeout(r, 800)) // simulate network delay
-      setCampaigns(mockCampaigns)
-      console.log("🚀 ~ fetchCampaigns ~ campaigns:", campaigns)
+  // When a job completes: update the selected modal if it is open, otherwise
+  // open it automatically so the user sees their result without refreshing.
+  const handleCompleted = useCallback((campaign: AiGeneration) => {
+    showToast('success', `✅ "${campaign.subject}" generation is complete!`)
+    setSelectedCampaign((prev) =>
+      // If the modal was already open for this campaign, refresh it in-place
+      prev?.id === campaign.id || prev?.subjectId === campaign.subjectId
+        ? campaign
+        : campaign, // always open the modal on completion
+    )
+  }, [showToast])
 
-      setFetchState('success')
-      return
-    }
+  // ── Campaigns state via polling hook ────────────────────────────────────────
+  const { campaigns, fetchState, refresh, addCampaign, updateCampaign } = useCampaigns({
+    userId: !authLoading && user ? String(user.id) : null,
+    onCompleted: handleCompleted,
+  })
 
-    // ── Real mode: hit the backend API ───────────────────────────────────────
-    try {
-      const data: AiGeneration[] = await apiRequest(`/subjects/user/${userId}`)
-      setCampaigns(data)
-      setFetchState('success')
-    } catch (err: any) {
-      console.error('Failed to fetch campaigns:', err)
-      setFetchState('error')
-      showToast('error', 'Failed to load campaigns. Please try again.')
-    }
-  }
+  // ── Optimistic add after form submission ────────────────────────────────────
+  // CampaignForm calls this immediately after the backend accepts the job.
+  // We don't expose CampaignForm here (it lives on /dashboard/campaigns), but
+  // a future refactor could embed it.  The hook's addCampaign is exported for
+  // any child that needs it.
 
-  useEffect(() => {
-    if (authLoading) return
+  // Keep the selected campaign in sync with the latest polled data so the modal
+  // shows live status/content updates as they arrive.
+  const handleSelectCampaign = useCallback((campaign: AiGeneration) => {
+    setSelectedCampaign(campaign)
+  }, [])
 
-    if (user?.id) {
-      fetchCampaigns(String(user.id))
-    } else {
-      setFetchState('success')
-    }
-  }, [user, authLoading])
+  const handleModalClose = useCallback(() => {
+    setSelectedCampaign(null)
+  }, [])
+
+  const handleSave = useCallback((updated: AiGeneration) => {
+    updateCampaign(updated)
+    setSelectedCampaign(updated)
+  }, [updateCampaign])
+
+  // Sync the open modal when the polling hook brings in fresh data for the
+  // same campaign (e.g. status flips to 'completed' while modal is open).
+  const syncedSelectedCampaign = selectedCampaign
+    ? (campaigns.find(
+        (c) => c.id === selectedCampaign.id || c.subjectId === selectedCampaign.subjectId,
+      ) ?? selectedCampaign)
+    : null
+
+  const hasActiveJobs = campaigns.some(
+    (c) => c.status === 'processing' || c.status === 'pending',
+  )
 
   return (
     <DashboardLayout>
@@ -84,9 +91,9 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold text-white tracking-tight">
               Campaigns
             </h1>
-            {USE_MOCK && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20">
-                Mock Mode
+            {hasActiveJobs && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20 animate-pulse">
+                Live
               </span>
             )}
           </div>
@@ -94,6 +101,7 @@ export default function DashboardPage() {
             All AI content generation requests for your account.
           </p>
         </div>
+
         <Link
           href="/dashboard/campaigns"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-sm font-semibold text-white hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/25"
@@ -111,7 +119,7 @@ export default function DashboardPage() {
           <AlertCircle className="w-10 h-10 text-red-400/60" />
           <p className="text-slate-400 text-sm">Could not load campaigns.</p>
           <button
-            onClick={() => user?.id && fetchCampaigns(String(user.id))}
+            onClick={refresh}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -120,7 +128,22 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {fetchState === 'success' && <CampaignList campaigns={campaigns} />}
+      {(fetchState === 'success' || fetchState === 'idle') && (
+        <CampaignList
+          campaigns={campaigns}
+          selectedCampaignId={syncedSelectedCampaign?.id ?? null}
+          onSelectCampaign={handleSelectCampaign}
+        />
+      )}
+
+      {/* Detail modal — rendered at the dashboard level so the poller can
+          open it programmatically when a job completes */}
+      <CampaignDetail
+        campaign={syncedSelectedCampaign}
+        onClose={handleModalClose}
+        onSave={handleSave}
+        isLivePolling={hasActiveJobs}
+      />
 
       <Toast toast={toast} onClose={() => setToast((t) => ({ ...t, show: false }))} />
     </DashboardLayout>

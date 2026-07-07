@@ -50,42 +50,32 @@ export class AiWorkerProcessor extends WorkerHost implements OnApplicationBootst
   async process(job: Job<CreateAiGenerationDto, any, string>): Promise<any> {
     this.logger.log(`Processing job ${job.id} attempt ${job.attemptsMade + 1} for subjectId: ${job.data.subjectId}`);
 
-    // On first attempt: create the DB record.
-    // On retries: reuse the existing record (by subjectId) to avoid duplicates.
-    let aiGenRecord: AiGeneration;
-    if (job.attemptsMade === 0) {
-      aiGenRecord = this.aiGenerationRepository.create({
-        subjectId: job.data.subjectId,
-        userId: job.data.userId,
-        subject: job.data.subject,
-        status: 'processing',
-      });
-      aiGenRecord = await this.aiGenerationRepository.save(aiGenRecord);
-    } else {
-      const existing = await this.aiGenerationRepository.findOne({
-        where: { subjectId: job.data.subjectId, status: Not('completed') },
-        order: { createdAt: 'DESC' },
-      });
-      if (existing) {
-        existing.status = 'processing';
-        existing.errorMessage = null;
-        aiGenRecord = await this.aiGenerationRepository.save(existing);
-      } else {
-        aiGenRecord = this.aiGenerationRepository.create({
-          subjectId: job.data.subjectId,
-          userId: job.data.userId,
-          subject: job.data.subject,
-          status: 'processing',
-        });
-        aiGenRecord = await this.aiGenerationRepository.save(aiGenRecord);
-      }
+    // The controller now creates the DB record before enqueuing.
+    // We look it up to process it. On retries, we reuse the existing record (by subjectId).
+    let aiGenRecord = await this.aiGenerationRepository.findOne({
+      where: { subjectId: job.data.subjectId },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!aiGenRecord) {
+      throw new Error(`Critical Error: Record for subjectId ${job.data.subjectId} not found in DB.`);
     }
 
+    if (aiGenRecord.status === 'completed') {
+      this.logger.log(`Job ${job.id} for subjectId ${job.data.subjectId} is already completed. Skipping.`);
+      return { status: 'success', id: aiGenRecord.id };
+    }
+
+    aiGenRecord.status = 'processing';
+    aiGenRecord.errorMessage = null;
+    aiGenRecord = await this.aiGenerationRepository.save(aiGenRecord);
+
     try {
-      // ✅ Pass BOTH subject and keywords to OpenAI
+      // ✅ Pass subject, keywords, and platform to OpenAI
       const generatedContent = await this.aiService.generateContent(
         job.data.subject,
         job.data.keywords,
+        job.data.platform,
       );
 
       aiGenRecord.generatedContent = generatedContent;
