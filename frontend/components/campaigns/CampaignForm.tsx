@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { FaLinkedin, FaInstagram, FaFacebook } from 'react-icons/fa';
+import { useState, useRef, useEffect } from 'react'
+import { FaLinkedin, FaInstagram, FaFacebook, FaTiktok } from 'react-icons/fa';
 import { Send, CheckCircle2, Loader2 } from 'lucide-react';
 import { Toast, ToastState } from '@/components/ui/Toast'
 import { FormSkeleton } from '@/components/ui/Skeleton'
 import { useAuth } from '@/hooks/use-auth'
 import { apiRequest } from '@/services/api.service'
 import { AiGeneration } from '@/components/campaigns/types'
+import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -20,10 +21,11 @@ interface CampaignFormData {
 interface ApiResponse {
   message: string
   jobId: string
+  campaignId: string
   duplicate?: boolean
 }
 
-type FormStatus = 'idle' | 'loading' | 'success' | 'error'
+type FormStatus = 'idle' | 'loading' | 'processing' | 'success' | 'error'
 
 interface CampaignFormProps {
   /**
@@ -32,46 +34,25 @@ interface CampaignFormProps {
    * to the list without waiting for the next poll.
    */
   onSuccess?: (campaign: AiGeneration) => void
+  /**
+   * Called when the generated campaign modal is closed or saved.
+   */
+  onFinished?: () => void
 }
 
 // ─── Success Card ──────────────────────────────────────────────────────────────
-
-function SuccessCard({ jobId, onReset }: { jobId: string; onReset: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 mb-6">
-        <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-      </div>
-      <h3 className="text-xl font-bold text-white mb-2">
-        Campaign Queued Successfully!
-      </h3>
-      <p className="text-slate-400 text-sm mb-4 max-w-xs">
-        Your subject is being processed by the AI engine. The dashboard will
-        update automatically when it&apos;s ready.
-      </p>
-      <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 mb-8">
-        <span className="text-xs text-slate-500 font-medium">Job ID: </span>
-        <span className="text-xs text-violet-400 font-mono font-semibold">
-          #{jobId}
-        </span>
-      </div>
-      <button
-        onClick={onReset}
-        className="px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:bg-white/10 transition-all"
-      >
-        Create Another Campaign
-      </button>
-    </div>
-  )
-}
+// We remove the old SuccessCard because we now directly show the CampaignDetail modal upon completion.
 
 // ─── Main Form ─────────────────────────────────────────────────────────────────
 
-export function CampaignForm({ onSuccess }: CampaignFormProps) {
+export function CampaignForm({ onSuccess, onFinished }: CampaignFormProps) {
   const { user } = useAuth()
 
   const [status, setStatus] = useState<FormStatus>('idle')
   const [jobId, setJobId] = useState<string>('')
+  const [campaignId, setCampaignId] = useState<string>('')
+  const [polledCampaign, setPolledCampaign] = useState<AiGeneration | null>(null)
+
   const [toast, setToast] = useState<ToastState>({ show: false, type: 'success', message: '' })
   const [formData, setFormData] = useState<CampaignFormData>({ subject: '', keywords: '', platform: 'LinkedIn' })
 
@@ -88,6 +69,26 @@ export function CampaignForm({ onSuccess }: CampaignFormProps) {
     setToast({ show: true, type, message })
     toastTimeoutRef.current = setTimeout(() => setToast((t) => ({ ...t, show: false })), 5000)
   }
+
+  // ── Polling Effect ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>
+    if (status === 'processing' && campaignId) {
+      interval = setInterval(async () => {
+        try {
+          const result = await apiRequest<AiGeneration>(`/subjects/${campaignId}`)
+          if (result && (result.status === 'completed' || result.status === 'failed')) {
+            setPolledCampaign(result)
+            setStatus('success')
+            clearInterval(interval)
+          }
+        } catch (err) {
+          // ignore
+        }
+      }, 2000)
+    }
+    return () => clearInterval(interval)
+  }, [status, campaignId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -129,21 +130,20 @@ export function CampaignForm({ onSuccess }: CampaignFormProps) {
       })
 
       setJobId(data.jobId)
-      setStatus('success')
+      setCampaignId(data.campaignId)
+      setStatus('processing')
       showToast(
         'success',
         data.duplicate
-          ? `Campaign already queued! Job #${data.jobId} is being processed.`
-          : `Campaign accepted! Job #${data.jobId} is being processed.`,
+          ? `Campaign already processing!`
+          : `Campaign accepted! Waiting for generation...`,
       )
 
       // Notify the parent dashboard immediately so it can prepend an optimistic
       // 'processing' card without waiting for the next poll cycle.
       if (onSuccess && user) {
         const optimisticCampaign: AiGeneration = {
-          // We don't have the DB UUID yet — use subjectId as a temporary id.
-          // The next poll will replace this with the real record from the server.
-          id: subjectId,
+          id: data.campaignId,
           subjectId,
           userId: user.id.toString(),
           subject: formData.subject.trim(),
@@ -168,10 +168,13 @@ export function CampaignForm({ onSuccess }: CampaignFormProps) {
   const handleReset = () => {
     setStatus('idle')
     setJobId('')
+    setCampaignId('')
+    setPolledCampaign(null)
     setFormData({ subject: '', keywords: '', platform: 'LinkedIn' })
   }
 
   const isLoading = status === 'loading'
+  const isProcessing = status === 'processing'
 
   return (
     <>
@@ -191,8 +194,16 @@ export function CampaignForm({ onSuccess }: CampaignFormProps) {
         <div className="px-8 py-8">
           {isLoading ? (
             <FormSkeleton />
-          ) : status === 'success' ? (
-            <SuccessCard jobId={jobId} onReset={handleReset} />
+          ) : isProcessing ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center gap-4">
+              <Loader2 className="w-12 h-12 text-violet-400 animate-spin" />
+              <h3 className="text-xl font-bold text-white">
+                Generating Content...
+              </h3>
+              <p className="text-slate-400 text-sm max-w-xs">
+                Please wait while the AI writes your campaign. This usually takes around 5-10 seconds.
+              </p>
+            </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Subject field */}
@@ -231,6 +242,7 @@ export function CampaignForm({ onSuccess }: CampaignFormProps) {
                     { id: 'LinkedIn', icon: FaLinkedin, label: 'LinkedIn' },
                     { id: 'Instagram', icon: FaInstagram, label: 'Instagram' },
                     { id: 'Facebook', icon: FaFacebook, label: 'Facebook' },
+                    { id: 'Tiktok', icon: FaTiktok, label: 'TikTok' },
                   ].map(({ id, icon: Icon, label }) => {
                     const isSelected = formData.platform === id
                     return (
@@ -318,6 +330,21 @@ export function CampaignForm({ onSuccess }: CampaignFormProps) {
       </div>
 
       <Toast toast={toast} onClose={() => setToast((t) => ({ ...t, show: false }))} />
+
+      {/* Modal is shown when polling finishes */}
+      {status === 'success' && polledCampaign && (
+        <CampaignDetail
+          campaign={polledCampaign}
+          onClose={() => {
+            handleReset()
+            onFinished?.()
+          }}
+          onSave={(updated) => {
+            handleReset()
+            onFinished?.()
+          }}
+        />
+      )}
     </>
   )
 }

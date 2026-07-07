@@ -8,6 +8,7 @@ import { DashboardLayout } from '@/components/dashboard/DashboardLayout'
 import { CampaignList } from '@/components/campaigns/CampaignList'
 import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
 import { AiGeneration } from '@/components/campaigns/types'
+import { BulkCampaignModal } from '@/components/campaigns/BulkCampaignModal'
 import { Toast, ToastState } from '@/components/ui/Toast'
 import { GridSkeleton } from '@/components/ui/Skeleton'
 import {
@@ -30,6 +31,9 @@ export default function DashboardPage() {
 
   // ── Selected campaign (controls the detail modal) ───────────────────────────
   const [selectedCampaign, setSelectedCampaign] = useState<AiGeneration | null>(null)
+
+  // ── Bulk Generation Modal State ─────────────────────────────────────────────
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false)
 
   // When a job completes: update the selected modal if it is open, otherwise
   // open it automatically so the user sees their result without refreshing.
@@ -102,13 +106,23 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <Link
-          href="/dashboard/campaigns"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-sm font-semibold text-white hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/25"
-        >
-          <Plus className="w-4 h-4" />
-          New Campaign
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsBulkModalOpen(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/20 bg-transparent text-sm font-semibold text-white hover:bg-white/5 transition-all shadow-lg"
+          >
+            <Plus className="w-4 h-4" />
+            Generate Multiple
+          </button>
+          
+          <Link
+            href="/dashboard/campaigns"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-sm font-semibold text-white hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/25"
+          >
+            <Plus className="w-4 h-4" />
+            New Campaign
+          </Link>
+        </div>
       </div>
 
       {/* Content */}
@@ -146,6 +160,17 @@ export default function DashboardPage() {
       />
 
       <Toast toast={toast} onClose={() => setToast((t) => ({ ...t, show: false }))} />
+
+      {isBulkModalOpen && (
+        <BulkCampaignModal 
+          onClose={() => setIsBulkModalOpen(false)} 
+          onSuccess={() => {
+            setIsBulkModalOpen(false)
+            showToast('success', 'Bulk generation started successfully! Campaigns will appear here shortly.')
+            refresh()
+          }} 
+        />
+      )}
     </DashboardLayout>
   )
 }

@@ -12,9 +12,8 @@ export default function CampaignsPage() {
 
   // After a successful submission, navigate back to the dashboard where
   // useCampaigns will pick up the new record on its next poll cycle.
-  const handleSuccess = useCallback((_campaign: AiGeneration) => {
-    // Short delay so the user can read the SuccessCard, then redirect
-    setTimeout(() => router.push('/dashboard'), 3000)
+  const handleFinished = useCallback(() => {
+    router.push('/dashboard')
   }, [router])
 
   return (
@@ -60,8 +59,8 @@ export default function CampaignsPage() {
         ))}
       </div>
 
-      {/* Form — onSuccess triggers a redirect back to the dashboard after 3 s */}
-      <CampaignForm onSuccess={handleSuccess} />
+      {/* Form — onFinished triggers a redirect back to the dashboard */}
+      <CampaignForm onFinished={handleFinished} />
     </DashboardLayout>
   )
 }
