@@ -5,8 +5,8 @@ import { AiService } from '../ai.service';
 export class MockAiService implements AiService {
   private readonly logger = new Logger(MockAiService.name);
 
-  async generateContent(subject: string, keywords?: string): Promise<string> {
-    this.logger.log(`[MOCK] Generating content for subject: "${subject}"${keywords ? ` | Keywords: ${keywords}` : ''}`);
+  async generateContent(subject: string, keywords?: string, platform?: string): Promise<string> {
+    this.logger.log(`[MOCK] Generating content for subject: "${subject}"${keywords ? ` | Keywords: ${keywords}` : ''}${platform ? ` | Platform: ${platform}` : ''}`);
 
     // Simulate realistic AI generation delay (3 seconds)
     await new Promise((resolve) => setTimeout(resolve, 3000));

@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import {
   Clock,
@@ -13,7 +12,6 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { AiGeneration } from './types'
-import { CampaignDetail } from './CampaignDetail'
 
 // ─── Status Config ─────────────────────────────────────────────────────────────
 
@@ -60,10 +58,11 @@ function StatusBadge({ status }: { status: AiGeneration['status'] }) {
 
 interface CampaignCardProps {
   campaign: AiGeneration
+  isSelected: boolean
   onClick: (campaign: AiGeneration) => void
 }
 
-function CampaignCard({ campaign, onClick }: CampaignCardProps) {
+function CampaignCard({ campaign, isSelected, onClick }: CampaignCardProps) {
   const formattedDate = new Date(campaign.createdAt).toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -75,13 +74,24 @@ function CampaignCard({ campaign, onClick }: CampaignCardProps) {
   return (
     <button
       onClick={() => onClick(campaign)}
-      className="w-full text-left rounded-2xl bg-white/[0.04] border border-white/10 p-5 flex flex-col gap-3 hover:bg-white/[0.07] hover:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-200 cursor-pointer group"
+      className={`w-full text-left rounded-2xl border p-5 flex flex-col gap-3 transition-all duration-200 cursor-pointer group
+        ${isSelected
+          ? 'bg-violet-500/10 border-violet-500/40 shadow-lg shadow-violet-500/15'
+          : 'bg-white/[0.04] border-white/10 hover:bg-white/[0.07] hover:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/10'
+        }`}
     >
       {/* Top row */}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-sm font-semibold text-white leading-snug flex-1 group-hover:text-violet-200 transition-colors">
-          {campaign.subject}
-        </h3>
+        <div className="flex flex-col gap-1 flex-1">
+          <h3 className="text-sm font-semibold text-white leading-snug group-hover:text-violet-200 transition-colors">
+            {campaign.subject}
+          </h3>
+          {campaign.platform && (
+            <span className="text-[10px] text-slate-400 font-medium">
+              Target: {campaign.platform}
+            </span>
+          )}
+        </div>
         <StatusBadge status={campaign.status} />
       </div>
 
@@ -157,30 +167,25 @@ function EmptyState() {
 
 interface CampaignListProps {
   campaigns: AiGeneration[]
+  /** The id of the currently-selected campaign (controlled by the parent) */
+  selectedCampaignId: string | null
+  /** Inform parent which campaign was clicked */
+  onSelectCampaign: (campaign: AiGeneration) => void
 }
 
-export function CampaignList({ campaigns }: CampaignListProps) {
-  const [selectedCampaign, setSelectedCampaign] = useState<AiGeneration | null>(null)
-
+export function CampaignList({ campaigns, selectedCampaignId, onSelectCampaign }: CampaignListProps) {
   if (campaigns?.length === 0) return <EmptyState />
 
   return (
-    <>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {campaigns.map((campaign) => (
-          <CampaignCard
-            key={campaign.id}
-            campaign={campaign}
-            onClick={setSelectedCampaign}
-          />
-        ))}
-      </div>
-
-      {/* Detail slide-over panel */}
-      <CampaignDetail
-        campaign={selectedCampaign}
-        onClose={() => setSelectedCampaign(null)}
-      />
-    </>
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {campaigns.map((campaign) => (
+        <CampaignCard
+          key={campaign.id}
+          campaign={campaign}
+          isSelected={selectedCampaignId === campaign.id}
+          onClick={onSelectCampaign}
+        />
+      ))}
+    </div>
   )
 }

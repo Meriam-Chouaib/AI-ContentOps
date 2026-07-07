@@ -13,6 +13,10 @@ export class CreateAiGenerationDto {
   @IsNotEmpty()
   subject: string;
 
+  @IsString()
+  @IsNotEmpty()
+  platform: string;
+
   @IsOptional()
   @IsString()
   keywords?: string;

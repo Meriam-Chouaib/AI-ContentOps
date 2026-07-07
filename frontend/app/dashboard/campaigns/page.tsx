@@ -1,10 +1,22 @@
 'use client'
 
+import { useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout'
 import { CampaignForm } from '@/components/campaigns/CampaignForm'
 import { Sparkles, Zap, BarChart3 } from 'lucide-react'
+import { AiGeneration } from '@/components/campaigns/types'
 
 export default function CampaignsPage() {
+  const router = useRouter()
+
+  // After a successful submission, navigate back to the dashboard where
+  // useCampaigns will pick up the new record on its next poll cycle.
+  const handleSuccess = useCallback((_campaign: AiGeneration) => {
+    // Short delay so the user can read the SuccessCard, then redirect
+    setTimeout(() => router.push('/dashboard'), 3000)
+  }, [router])
+
   return (
     <DashboardLayout>
       {/* Header */}
@@ -48,8 +60,8 @@ export default function CampaignsPage() {
         ))}
       </div>
 
-      {/* Form */}
-      <CampaignForm />
+      {/* Form — onSuccess triggers a redirect back to the dashboard after 3 s */}
+      <CampaignForm onSuccess={handleSuccess} />
     </DashboardLayout>
   )
 }

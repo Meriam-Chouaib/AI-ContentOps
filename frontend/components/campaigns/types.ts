@@ -4,6 +4,7 @@ export interface AiGeneration {
   subjectId: string
   userId: string
   subject: string
+  platform: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   generatedContent: string | null
   errorMessage: string | null

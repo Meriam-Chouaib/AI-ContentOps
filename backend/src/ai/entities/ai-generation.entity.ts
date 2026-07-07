@@ -14,6 +14,9 @@ export class AiGeneration {
   @Column()
   subject: string;
 
+  @Column({ nullable: true })
+  platform: string;
+
   @Column({ type: 'text', nullable: true })
   generatedContent: string | null;
 
