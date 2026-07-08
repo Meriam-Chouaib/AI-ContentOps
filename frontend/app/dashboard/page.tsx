@@ -147,10 +147,10 @@ export default function DashboardPage() {
   return (
     <DashboardLayout>
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6 sm:mb-8">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-3xl font-bold text-white tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
               Campaigns
             </h1>
             {hasActiveJobs && (
@@ -159,15 +159,15 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          <p className="text-slate-400">
+          <p className="text-slate-400 text-sm">
             All AI content generation requests for your account.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:shrink-0">
           {/* Bulk polling status indicator */}
           {isBulkPolling && (
-            <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-violet-500/30 bg-violet-500/10 text-sm text-violet-300 font-medium">
+            <span className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-violet-500/30 bg-violet-500/10 text-xs sm:text-sm text-violet-300 font-medium">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               Processing bulk…
             </span>
@@ -176,15 +176,16 @@ export default function DashboardPage() {
           <button
             onClick={() => setIsBulkModalOpen(true)}
             disabled={isBulkPolling}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/20 bg-transparent text-sm font-semibold text-white hover:bg-white/5 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 bg-transparent text-sm font-semibold text-white hover:bg-white/5 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
-            Generate Multiple
+            <span className="hidden xs:inline">Generate Multiple</span>
+            <span className="xs:hidden">Bulk</span>
           </button>
-          
+
           <Link
             href="/dashboard/campaigns"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-sm font-semibold text-white hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/25"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-sm font-semibold text-white hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/25"
           >
             <Plus className="w-4 h-4" />
             New Campaign
