@@ -9,6 +9,8 @@ import { OpenAiService } from './services/openai.service';
 import { AiProducerService } from './ai-producer.service';
 import { AiWorkerProcessor } from './ai-worker.processor';
 import { AiGeneration } from './entities/ai-generation.entity';
+import { PostingService } from './services/posting.service';
+import { SchedulerService } from './services/scheduler.service';
 
 @Module({
   imports: [
@@ -32,6 +34,9 @@ import { AiGeneration } from './entities/ai-generation.entity';
     },
     AiProducerService,
     AiWorkerProcessor,
+    PostingService,
+    SchedulerService,
   ],
+  exports: [AiProducerService],
 })
-export class AiModule {}
+export class AiModule { }

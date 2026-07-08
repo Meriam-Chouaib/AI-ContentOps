@@ -59,6 +59,18 @@ const STATUS_CONFIG = {
     badge: 'bg-red-500/15 text-red-300 border border-red-500/25',
     glow: 'from-red-500/10 to-transparent',
   },
+  queued: {
+    label: 'Scheduled',
+    icon: CalendarDays,
+    badge: 'bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/25',
+    glow: 'from-fuchsia-500/10 to-transparent',
+  },
+  posted: {
+    label: 'Posted',
+    icon: CheckCircle2,
+    badge: 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/25',
+    glow: 'from-indigo-500/10 to-transparent',
+  },
 }
 
 // ─── Status Badge ──────────────────────────────────────────────────────────────
@@ -227,7 +239,7 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
     minute: '2-digit',
   })
 
-  const isCompleted = localCampaign.status === 'completed' && !!localCampaign.generatedContent
+  const hasContent = ['completed', 'queued', 'posted'].includes(localCampaign.status) && !!localCampaign.generatedContent
 
   const handleContentSaved = (updatedContent: string) => {
     const updated: AiGeneration = { ...localCampaign, generatedContent: updatedContent }
@@ -300,13 +312,19 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
               <MetaItem icon={Hash} label="Job ID" value={localCampaign.subjectId} />
               <div className="h-px bg-white/[0.06]" />
               <MetaItem icon={Tag} label="Status" value={config.label} />
+              {localCampaign.platformPostId && (
+                <>
+                  <div className="h-px bg-white/[0.06]" />
+                  <MetaItem icon={Hash} label="Post ID" value={localCampaign.platformPostId} />
+                </>
+              )}
             </div>
 
             {/* Right — main content */}
             <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
 
-              {/* Completed → editable article */}
-              {isCompleted && (
+              {/* Has content → editable article */}
+              {hasContent && (
                 <ArticlePanel
                   content={localCampaign.generatedContent!}
                   campaignId={localCampaign.id}

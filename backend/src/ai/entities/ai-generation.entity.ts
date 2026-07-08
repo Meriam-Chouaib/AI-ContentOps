@@ -21,7 +21,13 @@ export class AiGeneration {
   generatedContent: string | null;
 
   @Column({ default: 'pending' })
-  status: string; // pending, processing, completed, failed
+  status: string; // pending, processing, completed, failed, queued, posted
+
+  @Column({ type: 'timestamp', nullable: true })
+  scheduledAt: Date | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  platformPostId: string | null;
 
   @Column({ type: 'text', nullable: true })
   errorMessage: string | null;
