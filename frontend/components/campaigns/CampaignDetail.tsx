@@ -264,9 +264,9 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
         className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8"
       >
         <div className="
-          w-full max-w-5xl h-full max-h-[88vh]
+          w-full max-w-5xl h-full max-h-[95vh] sm:max-h-[88vh]
           bg-[#0d0f16] border border-white/[0.09]
-          rounded-3xl shadow-[0_32px_80px_rgba(0,0,0,0.7)]
+          rounded-2xl sm:rounded-3xl shadow-[0_32px_80px_rgba(0,0,0,0.7)]
           flex flex-col overflow-hidden
           animate-modal-in
         ">
@@ -275,9 +275,9 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
           <div className={`h-1 w-full bg-gradient-to-r ${config.glow} opacity-80`} />
 
           {/* ── Header ── */}
-          <div className="flex items-start justify-between gap-6 px-8 py-6 border-b border-white/[0.07] shrink-0">
-            <div className="flex flex-col gap-3 min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-start justify-between gap-4 px-4 sm:px-8 py-4 sm:py-6 border-b border-white/[0.07] shrink-0">
+            <div className="flex flex-col gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <StatusBadge status={localCampaign.status} />
 
                 {/* Live-polling indicator */}
@@ -288,7 +288,7 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
                   </span>
                 )}
               </div>
-              <h2 className="text-2xl font-bold text-white leading-tight truncate">
+              <h2 className="text-lg sm:text-2xl font-bold text-white leading-tight">
                 {localCampaign.subject}
               </h2>
             </div>
@@ -296,7 +296,7 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
             <button
               onClick={onClose}
               aria-label="Close modal"
-              className="w-9 h-9 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-slate-400 hover:text-white transition-all shrink-0 mt-1"
+              className="w-9 h-9 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-slate-400 hover:text-white transition-all shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -305,19 +305,30 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
           {/* ── Body ── */}
           <div className="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0">
 
-            {/* Left sidebar — meta */}
-            <div className="md:w-64 lg:w-72 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] px-8 py-6 flex flex-col gap-6 overflow-y-auto">
-              <MetaItem icon={CalendarDays} label="Created" value={formattedDate} />
-              <div className="h-px bg-white/[0.06]" />
-              <MetaItem icon={Hash} label="Job ID" value={localCampaign.subjectId} />
-              <div className="h-px bg-white/[0.06]" />
-              <MetaItem icon={Tag} label="Status" value={config.label} />
-              {localCampaign.platformPostId && (
-                <>
-                  <div className="h-px bg-white/[0.06]" />
-                  <MetaItem icon={Hash} label="Post ID" value={localCampaign.platformPostId} />
-                </>
-              )}
+            {/* Left sidebar — meta (horizontal scroll on mobile, sidebar on desktop) */}
+            <div className="md:w-64 lg:w-72 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] md:overflow-y-auto">
+              {/* Mobile: horizontal scrollable row */}
+              <div className="flex md:flex-col gap-4 md:gap-6 px-4 sm:px-8 py-4 md:py-6 overflow-x-auto md:overflow-x-visible">
+                <div className="shrink-0 md:shrink-0">
+                  <MetaItem icon={CalendarDays} label="Created" value={formattedDate} />
+                </div>
+                <div className="hidden md:block h-px bg-white/[0.06]" />
+                <div className="shrink-0 md:shrink-0">
+                  <MetaItem icon={Hash} label="Job ID" value={localCampaign.subjectId} />
+                </div>
+                <div className="hidden md:block h-px bg-white/[0.06]" />
+                <div className="shrink-0 md:shrink-0">
+                  <MetaItem icon={Tag} label="Status" value={config.label} />
+                </div>
+                {localCampaign.platformPostId && (
+                  <>
+                    <div className="hidden md:block h-px bg-white/[0.06]" />
+                    <div className="shrink-0 md:shrink-0">
+                      <MetaItem icon={Hash} label="Post ID" value={localCampaign.platformPostId} />
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Right — main content */}
