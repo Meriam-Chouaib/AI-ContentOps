@@ -9,6 +9,7 @@ import { ConfigModule } from '@nestjs/config'; // 🚀 Import
 import { BullModule } from '@nestjs/bullmq';
 import { AiModule } from './ai/ai.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 
 @Module({
@@ -36,6 +37,7 @@ import { join } from 'path';
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
+    ScheduleModule.forRoot(),
     UsersModule,
     AuthModule,
     AiModule,

@@ -14,6 +14,7 @@ import { Not, Repository } from 'typeorm';
 import { AiProducerService } from './ai-producer.service';
 import { CreateAiGenerationDto } from './dto/create-ai-generation.dto';
 import { AiGeneration } from './entities/ai-generation.entity';
+import { BulkCampaignValidationPipe } from './pipes/bulk-campaign-validation.pipe';
 
 @Controller('subjects')
 export class AiController {
@@ -61,7 +62,63 @@ export class AiController {
     return {
       message: 'Subject accepted for processing.',
       jobId: job.id,
+      campaignId: aiGenRecord.id,
       duplicate: false,
+    };
+  }
+
+  // ─── POST /subjects/bulk ────────────────────────────────────────────────────
+  @Post('bulk')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async createSubjectsBulk(
+    @Body(new BulkCampaignValidationPipe()) 
+    createAiGenerationDtos: CreateAiGenerationDto[]
+  ) {
+    if (!Array.isArray(createAiGenerationDtos)) {
+      throw new ConflictException('Expected an array of subjects for bulk generation.');
+    }
+
+    const queuedJobs: any[] = [];
+
+    for (const dto of createAiGenerationDtos) {
+      const { subjectId } = dto;
+      
+      const existing = await this.aiGenerationRepository.findOne({
+        where: { subjectId, status: Not('failed') },
+      });
+
+      if (existing) {
+        queuedJobs.push({
+          subjectId: existing.subjectId,
+          jobId: existing.subjectId,
+          campaignId: existing.id,
+          duplicate: true,
+        });
+        continue;
+      }
+
+      const aiGenRecord = this.aiGenerationRepository.create({
+        subjectId,
+        userId: dto.userId,
+        subject: dto.subject,
+        platform: dto.platform,
+        status: 'processing',
+      });
+      await this.aiGenerationRepository.save(aiGenRecord);
+
+      const job = await this.aiProducerService.enqueueGeneration(dto);
+      
+      queuedJobs.push({
+        subjectId,
+        jobId: job.id,
+        campaignId: aiGenRecord.id,
+        duplicate: false,
+      });
+    }
+
+    return {
+      message: `Bulk subjects accepted for processing. Queued ${queuedJobs.length} jobs.`,
+      jobs: queuedJobs,
     };
   }
 

@@ -10,6 +10,8 @@ import {
   Plus,
   FileText,
   AlertTriangle,
+  CalendarClock,
+  Send,
 } from 'lucide-react'
 import { AiGeneration } from './types'
 
@@ -36,6 +38,16 @@ const STATUS_CONFIG = {
     label: 'Failed',
     icon: XCircle,
     className: 'bg-red-500/15 text-red-400 border border-red-500/20',
+  },
+  queued: {
+    label: 'Scheduled',
+    icon: CalendarClock,
+    className: 'bg-fuchsia-500/15 text-fuchsia-400 border border-fuchsia-500/20',
+  },
+  posted: {
+    label: 'Posted',
+    icon: Send,
+    className: 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20',
   },
 }
 

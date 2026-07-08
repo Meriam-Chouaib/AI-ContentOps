@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/use-auth'
 import { useCampaigns } from '@/hooks/use-campaigns'
@@ -8,12 +8,16 @@ import { DashboardLayout } from '@/components/dashboard/DashboardLayout'
 import { CampaignList } from '@/components/campaigns/CampaignList'
 import { CampaignDetail } from '@/components/campaigns/CampaignDetail'
 import { AiGeneration } from '@/components/campaigns/types'
+import { BulkCampaignModal } from '@/components/campaigns/BulkCampaignModal'
+import { BulkReviewModal } from '@/components/campaigns/BulkReviewModal'
 import { Toast, ToastState } from '@/components/ui/Toast'
 import { GridSkeleton } from '@/components/ui/Skeleton'
+import { apiRequest } from '@/services/api.service'
 import {
   Plus,
   AlertCircle,
   RefreshCw,
+  Loader2,
 } from 'lucide-react'
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -31,17 +35,29 @@ export default function DashboardPage() {
   // ── Selected campaign (controls the detail modal) ───────────────────────────
   const [selectedCampaign, setSelectedCampaign] = useState<AiGeneration | null>(null)
 
-  // When a job completes: update the selected modal if it is open, otherwise
-  // open it automatically so the user sees their result without refreshing.
+  // ── Bulk Generation Modal State ─────────────────────────────────────────────
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false)
+
+  // ── Bulk Review State ───────────────────────────────────────────────────────
+  // bulkPendingIds: campaign DB IDs we are waiting for completion
+  // bulkReadyCampaigns: fully completed campaigns ready for sequential review
+  const [bulkPendingIds, setBulkPendingIds] = useState<string[]>([])
+  const [bulkReadyCampaigns, setBulkReadyCampaigns] = useState<AiGeneration[] | null>(null)
+  const [isBulkPolling, setIsBulkPolling] = useState(false)
+  const bulkPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // When a job completes: update the selected modal if it is open
   const handleCompleted = useCallback((campaign: AiGeneration) => {
-    showToast('success', `✅ "${campaign.subject}" generation is complete!`)
-    setSelectedCampaign((prev) =>
-      // If the modal was already open for this campaign, refresh it in-place
-      prev?.id === campaign.id || prev?.subjectId === campaign.subjectId
-        ? campaign
-        : campaign, // always open the modal on completion
-    )
-  }, [showToast])
+    // Only show single-campaign toast if we're not in bulk mode
+    if (bulkPendingIds.length === 0) {
+      showToast('success', `✅ "${campaign.subject}" generation is complete!`)
+      setSelectedCampaign((prev) =>
+        prev?.id === campaign.id || prev?.subjectId === campaign.subjectId
+          ? campaign
+          : campaign,
+      )
+    }
+  }, [showToast, bulkPendingIds.length])
 
   // ── Campaigns state via polling hook ────────────────────────────────────────
   const { campaigns, fetchState, refresh, addCampaign, updateCampaign } = useCampaigns({
@@ -49,14 +65,61 @@ export default function DashboardPage() {
     onCompleted: handleCompleted,
   })
 
-  // ── Optimistic add after form submission ────────────────────────────────────
-  // CampaignForm calls this immediately after the backend accepts the job.
-  // We don't expose CampaignForm here (it lives on /dashboard/campaigns), but
-  // a future refactor could embed it.  The hook's addCampaign is exported for
-  // any child that needs it.
+  // ── Bulk Polling: poll individual campaign IDs until all complete ────────────
+  useEffect(() => {
+    if (bulkPendingIds.length === 0) return
 
-  // Keep the selected campaign in sync with the latest polled data so the modal
-  // shows live status/content updates as they arrive.
+    setIsBulkPolling(true)
+    const completed: AiGeneration[] = []
+
+    const pollBulk = async () => {
+      try {
+        const results = await Promise.all(
+          bulkPendingIds.map((id) => apiRequest<AiGeneration>(`/subjects/${id}`))
+        )
+
+        const allDone = results.every(
+          (r) => r && (r.status === 'completed' || r.status === 'failed')
+        )
+
+        if (allDone) {
+          clearInterval(bulkPollIntervalRef.current!)
+          bulkPollIntervalRef.current = null
+          setIsBulkPolling(false)
+          setBulkPendingIds([])
+          // Only show review modal for completed (not failed) ones
+          const completedCampaigns = results.filter(
+            (r) => r.status === 'completed' && r.generatedContent
+          )
+          if (completedCampaigns.length > 0) {
+            setBulkReadyCampaigns(completedCampaigns)
+          } else {
+            showToast('error', 'All bulk campaigns failed to generate. Check your settings.')
+          }
+          refresh()
+        }
+      } catch {
+        // ignore transient errors
+      }
+    }
+
+    bulkPollIntervalRef.current = setInterval(pollBulk, 3000)
+    // Run immediately on mount
+    pollBulk()
+
+    return () => {
+      if (bulkPollIntervalRef.current) clearInterval(bulkPollIntervalRef.current)
+    }
+  }, [bulkPendingIds]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleBulkSuccess = useCallback((campaignIds: string[]) => {
+    setIsBulkModalOpen(false)
+    showToast('success', `${campaignIds.length} campaign(s) queued! Polling for completion…`)
+    setBulkPendingIds(campaignIds)
+    refresh()
+  }, [showToast, refresh])
+
+  // ── Single campaign select ───────────────────────────────────────────────────
   const handleSelectCampaign = useCallback((campaign: AiGeneration) => {
     setSelectedCampaign(campaign)
   }, [])
@@ -70,8 +133,7 @@ export default function DashboardPage() {
     setSelectedCampaign(updated)
   }, [updateCampaign])
 
-  // Sync the open modal when the polling hook brings in fresh data for the
-  // same campaign (e.g. status flips to 'completed' while modal is open).
+  // Sync the open modal when the polling hook brings in fresh data
   const syncedSelectedCampaign = selectedCampaign
     ? (campaigns.find(
         (c) => c.id === selectedCampaign.id || c.subjectId === selectedCampaign.subjectId,
@@ -102,13 +164,32 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <Link
-          href="/dashboard/campaigns"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-sm font-semibold text-white hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/25"
-        >
-          <Plus className="w-4 h-4" />
-          New Campaign
-        </Link>
+        <div className="flex items-center gap-3">
+          {/* Bulk polling status indicator */}
+          {isBulkPolling && (
+            <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-violet-500/30 bg-violet-500/10 text-sm text-violet-300 font-medium">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Processing bulk…
+            </span>
+          )}
+
+          <button
+            onClick={() => setIsBulkModalOpen(true)}
+            disabled={isBulkPolling}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/20 bg-transparent text-sm font-semibold text-white hover:bg-white/5 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="w-4 h-4" />
+            Generate Multiple
+          </button>
+          
+          <Link
+            href="/dashboard/campaigns"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-sm font-semibold text-white hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/25"
+          >
+            <Plus className="w-4 h-4" />
+            New Campaign
+          </Link>
+        </div>
       </div>
 
       {/* Content */}
@@ -137,7 +218,7 @@ export default function DashboardPage() {
       )}
 
       {/* Detail modal — rendered at the dashboard level so the poller can
-          open it programmatically when a job completes */}
+          open it programmatically when a single job completes */}
       <CampaignDetail
         campaign={syncedSelectedCampaign}
         onClose={handleModalClose}
@@ -146,6 +227,27 @@ export default function DashboardPage() {
       />
 
       <Toast toast={toast} onClose={() => setToast((t) => ({ ...t, show: false }))} />
+
+      {/* Bulk upload modal */}
+      {isBulkModalOpen && (
+        <BulkCampaignModal
+          onClose={() => setIsBulkModalOpen(false)}
+          onSuccess={handleBulkSuccess}
+        />
+      )}
+
+      {/* Sequential review modal — opens when all bulk jobs finish */}
+      {bulkReadyCampaigns && bulkReadyCampaigns.length > 0 && (
+        <BulkReviewModal
+          campaigns={bulkReadyCampaigns}
+          onClose={() => setBulkReadyCampaigns(null)}
+          onAllDone={() => {
+            setBulkReadyCampaigns(null)
+            showToast('success', '🎉 All campaigns reviewed and saved!')
+            refresh()
+          }}
+        />
+      )}
     </DashboardLayout>
   )
 }
