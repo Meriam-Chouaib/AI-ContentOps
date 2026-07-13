@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// Schéma partagé pour la connexion
+// Schéma partagé pour la connexiondd
 export const loginSchema = z.object({
   email: z
     .string()
