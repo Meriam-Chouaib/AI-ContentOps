@@ -1,19 +1,28 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Clock,
   CheckCircle2,
   XCircle,
   Loader2,
-  Sparkles,
-  Plus,
-  FileText,
-  AlertTriangle,
   CalendarClock,
   Send,
+  Calendar,
+
+  Video,
+  Copy,
+  FileText,
+  AlertTriangle,
+  Sparkles,
+  Plus,
 } from 'lucide-react'
+import { FaLinkedin, FaInstagram, FaFacebook, FaTiktok } from 'react-icons/fa';
+
 import { AiGeneration } from './types'
+import { apiRequest } from '@/services/api.service'
+import { ShareHistory, ShareEvent } from './ShareHistory'
 
 // ─── Status Config ─────────────────────────────────────────────────────────────
 
@@ -72,9 +81,26 @@ interface CampaignCardProps {
   campaign: AiGeneration
   isSelected: boolean
   onClick: (campaign: AiGeneration) => void
+  onUpdateCampaign?: (campaign: AiGeneration) => void
 }
 
-function CampaignCard({ campaign, isSelected, onClick }: CampaignCardProps) {
+function CampaignCard({ campaign, isSelected, onClick, onUpdateCampaign }: CampaignCardProps) {
+  const [mode, setMode] = useState<'idle' | 'sharing' | 'scheduling'>('idle')
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [shareHistory, setShareHistory] = useState<ShareEvent[]>([])
+  const [loadingPlatform, setLoadingPlatform] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+
+  // Fetch share history on mount
+  useEffect(() => {
+    if (campaign.status === 'completed' || campaign.status === 'posted') {
+      apiRequest<ShareEvent[]>(`/subjects/${campaign.id}/history`)
+        .then(setShareHistory)
+        .catch((err) => console.error('Failed to fetch share history', err))
+    }
+  }, [campaign.id, campaign.status])
+
   const formattedDate = new Date(campaign.createdAt).toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -83,8 +109,85 @@ function CampaignCard({ campaign, isSelected, onClick }: CampaignCardProps) {
     minute: '2-digit',
   })
 
+  const handlePlatformSelect = async (e: React.MouseEvent, platform: string) => {
+    e.stopPropagation()
+
+    // Copy to clipboard
+    if (campaign.generatedContent) {
+      await navigator.clipboard.writeText(campaign.generatedContent)
+    }
+
+    const placeholderUrl = typeof window !== 'undefined' ? window.location.origin : 'https://example.com'
+    const encodedUrl = encodeURIComponent(placeholderUrl)
+
+    setLoadingPlatform(platform)
+    try {
+      // 1. Mark as posted (existing logic)
+      const updated = await apiRequest<AiGeneration>(`/subjects/${campaign.id}/post-now`, { method: 'POST' })
+      onUpdateCampaign?.(updated)
+      
+      // 2. Log to sharing history
+      const newEvent = await apiRequest<ShareEvent>(`/subjects/${campaign.id}/history`, {
+        method: 'POST',
+        body: { platform }
+      })
+      setShareHistory((prev) => [newEvent, ...prev])
+    } catch (err: any) {
+      console.error(err)
+    } finally {
+      setLoadingPlatform(null)
+    }
+
+    if (platform === 'LinkedIn') {
+      window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`, '_blank')
+    } else if (platform === 'Facebook') {
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, '_blank')
+    } else if (platform === 'TikTok') {
+      window.open('https://www.tiktok.com', '_blank')
+    } else {
+      window.open('https://www.instagram.com', '_blank')
+    }
+  }
+
+  const handleShareNowClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    // Toggle platform picker — stays open so user can reshare to multiple
+    setMode((m) => m === 'sharing' ? 'idle' : 'sharing')
+  }
+
+  const handleScheduleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setMode('scheduling')
+  }
+
+  const handleCancelSchedule = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setMode('idle')
+  }
+
+  const handleConfirmSchedule = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!scheduledAt) return
+    setIsSubmitting(true)
+    try {
+      const updated = await apiRequest<AiGeneration>(`/subjects/${campaign.id}/schedule`, {
+        method: 'POST',
+        body: { scheduledAt: new Date(scheduledAt).toISOString() }
+      })
+      onUpdateCampaign?.(updated)
+    } catch (err: any) {
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+      setMode('idle')
+    }
+  }
+
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') onClick(campaign) }}
       onClick={() => onClick(campaign)}
       className={`w-full text-left rounded-2xl border p-5 flex flex-col gap-3 transition-all duration-200 cursor-pointer group
         ${isSelected
@@ -92,7 +195,7 @@ function CampaignCard({ campaign, isSelected, onClick }: CampaignCardProps) {
           : 'bg-white/[0.04] border-white/10 hover:bg-white/[0.07] hover:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/10'
         }`}
     >
-      {/* Top row */}
+      {/* Top row: title + History (posted) + status badge */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1 flex-1">
           <h3 className="text-sm font-semibold text-white leading-snug group-hover:text-violet-200 transition-colors">
@@ -104,7 +207,23 @@ function CampaignCard({ campaign, isSelected, onClick }: CampaignCardProps) {
             </span>
           )}
         </div>
-        <StatusBadge status={campaign.status} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* History button — shown on posted cards always */}
+          {campaign.status === 'posted' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowHistory((v) => !v) }}
+              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-semibold border transition-all
+                ${showHistory
+                  ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
+                  : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:bg-white/[0.08]'
+                }`}
+            >
+              <CalendarClock className="w-2.5 h-2.5" />
+              History
+            </button>
+          )}
+          <StatusBadge status={campaign.status} />
+        </div>
       </div>
 
       {/* Date */}
@@ -144,11 +263,113 @@ function CampaignCard({ campaign, isSelected, onClick }: CampaignCardProps) {
         </div>
       )}
 
+      {/* Share History — toggled via History button on Posted cards */}
+      {showHistory && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ShareHistory events={shareHistory} />
+        </div>
+      )}
+
+      {/* Action buttons — for completed AND posted (resharing) */}
+      {(campaign.status === 'completed' || campaign.status === 'posted') && mode === 'idle' && (
+        <div className="flex gap-2 mt-1">
+          <button
+            onClick={handleShareNowClick}
+            disabled={!!loadingPlatform}
+            className="flex-1 flex justify-center items-center gap-1.5 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-[11px] font-semibold transition-all shadow-md disabled:opacity-50"
+          >
+            <Send className="w-3 h-3" />
+            Share Now
+          </button>
+          <button
+            onClick={handleScheduleClick}
+            disabled={!!loadingPlatform}
+            className="flex-1 flex justify-center items-center gap-1.5 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-slate-200 text-[11px] font-semibold transition-all shadow-sm disabled:opacity-50"
+          >
+            <Calendar className="w-3 h-3 text-slate-400" />
+            Schedule
+          </button>
+        </div>
+      )}
+
+      {/* Platform picker — only visible after clicking Share Now; stays open for resharing */}
+      {(campaign.status === 'completed' || campaign.status === 'posted') && mode === 'sharing' && (
+        <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Select Platform</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); setMode('idle') }}
+              className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              Done
+            </button>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { name: 'Facebook', icon: FaFacebook, color: 'text-blue-500 hover:bg-blue-500/10' },
+              { name: 'LinkedIn', icon: FaLinkedin, color: 'text-sky-500 hover:bg-sky-500/10' },
+              { name: 'Instagram', icon: FaInstagram, color: 'text-pink-500 hover:bg-pink-500/10' },
+              { name: 'TikTok', icon: FaTiktok, color: 'text-slate-300 hover:bg-slate-300/10' },
+            ].map((p) => {
+              const isLoading = loadingPlatform === p.name
+              const wasShared = shareHistory.some((e) => e.platform === p.name)
+              return (
+                <button
+                  key={p.name}
+                  onClick={(e) => handlePlatformSelect(e, p.name)}
+                  disabled={!!loadingPlatform}
+                  className={`relative flex flex-col items-center gap-1.5 py-2 rounded-lg bg-white/[0.03] border transition-all
+                    ${wasShared ? 'border-emerald-500/40 ring-1 ring-emerald-500/30' : 'border-white/[0.05]'}
+                    ${p.color}`}
+                >
+                  {wasShared && (
+                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  )}
+                  {isLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <p.icon className="w-4 h-4" />
+                  }
+                  <span className="text-[9px] font-medium">{p.name}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Schedule date picker */}
+      {(campaign.status === 'completed' || campaign.status === 'posted') && mode === 'scheduling' && (
+        <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="datetime-local"
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+            className="w-full px-3 py-1.5 rounded-lg bg-black/40 border border-white/[0.12] text-white text-xs outline-none focus:border-violet-500/80 transition-colors shadow-inner"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleCancelSchedule}
+              className="px-3 py-1.5 rounded-lg bg-white/[0.05] text-slate-300 text-[11px] font-semibold hover:bg-white/[0.1] transition-all shadow-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmSchedule}
+              disabled={isSubmitting}
+              className="flex-1 flex justify-center items-center gap-1.5 py-1.5 rounded-lg bg-violet-600 text-white text-[11px] font-semibold hover:bg-violet-500 transition-all shadow-md disabled:opacity-50"
+            >
+              {isSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Calendar className="w-3 h-3" />}
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Click hint */}
-      <p className="text-[11px] text-slate-600 group-hover:text-slate-500 transition-colors">
+      <p className="text-[11px] text-slate-600 group-hover:text-slate-500 transition-colors mt-auto pt-2">
         Click to view details →
       </p>
-    </button>
+    </div>
   )
 }
 
@@ -183,9 +404,10 @@ interface CampaignListProps {
   selectedCampaignId: string | null
   /** Inform parent which campaign was clicked */
   onSelectCampaign: (campaign: AiGeneration) => void
+  onUpdateCampaign?: (campaign: AiGeneration) => void
 }
 
-export function CampaignList({ campaigns, selectedCampaignId, onSelectCampaign }: CampaignListProps) {
+export function CampaignList({ campaigns, selectedCampaignId, onSelectCampaign, onUpdateCampaign }: CampaignListProps) {
   if (campaigns?.length === 0) return <EmptyState />
 
   return (
@@ -196,6 +418,7 @@ export function CampaignList({ campaigns, selectedCampaignId, onSelectCampaign }
           campaign={campaign}
           isSelected={selectedCampaignId === campaign.id}
           onClick={onSelectCampaign}
+          onUpdateCampaign={onUpdateCampaign}
         />
       ))}
     </div>

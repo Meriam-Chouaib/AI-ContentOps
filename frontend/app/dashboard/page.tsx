@@ -215,6 +215,7 @@ export default function DashboardPage() {
           campaigns={campaigns}
           selectedCampaignId={syncedSelectedCampaign?.id ?? null}
           onSelectCampaign={handleSelectCampaign}
+          onUpdateCampaign={updateCampaign}
         />
       )}
 
