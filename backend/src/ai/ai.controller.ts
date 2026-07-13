@@ -8,13 +8,19 @@ import {
   HttpCode,
   HttpStatus,
   ConflictException,
+  Res,
+  Query,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { AiProducerService } from './ai-producer.service';
 import { CreateAiGenerationDto } from './dto/create-ai-generation.dto';
 import { AiGeneration } from './entities/ai-generation.entity';
 import { BulkCampaignValidationPipe } from './pipes/bulk-campaign-validation.pipe';
+import { PostingService } from './services/posting.service';
+import { ExcelExportService } from './services/excel-export.service';
+import { SharingHistoryService } from './services/sharing-history.service';
 
 @Controller('subjects')
 export class AiController {
@@ -22,6 +28,9 @@ export class AiController {
     private readonly aiProducerService: AiProducerService,
     @InjectRepository(AiGeneration)
     private readonly aiGenerationRepository: Repository<AiGeneration>,
+    private readonly postingService: PostingService,
+    private readonly excelExportService: ExcelExportService,
+    private readonly sharingHistoryService: SharingHistoryService,
   ) { }
 
   // ─── POST /subjects ─────────────────────────────────────────────────────────
@@ -158,5 +167,98 @@ export class AiController {
     }
 
     return this.aiGenerationRepository.save(record);
+  }
+
+  // ─── POST /subjects/:id/post-now ─────────────────────────────────────────────
+  @Post(':id/post-now')
+  async postNow(@Param('id') id: string) {
+    const record = await this.aiGenerationRepository.findOne({ where: { id } });
+    if (!record) {
+      throw new ConflictException(`Campaign ${id} not found.`);
+    }
+
+    try {
+      const platformPostId = await this.postingService.postCampaign(record);
+      record.status = 'posted';
+      record.platformPostId = platformPostId;
+      record.errorMessage = null;
+      await this.aiGenerationRepository.save(record);
+
+      await this.excelExportService.logCampaignAction(record);
+
+      return record;
+    } catch (error: any) {
+      record.status = 'failed';
+      record.errorMessage = error.message;
+      await this.aiGenerationRepository.save(record);
+      throw new ConflictException(`Failed to post campaign: ${error.message}`);
+    }
+  }
+
+  // ─── POST /subjects/:id/schedule ─────────────────────────────────────────────
+  @Post(':id/schedule')
+  async schedule(
+    @Param('id') id: string,
+    @Body() body: { scheduledAt: string },
+  ) {
+    const record = await this.aiGenerationRepository.findOne({ where: { id } });
+    if (!record) {
+      throw new ConflictException(`Campaign ${id} not found.`);
+    }
+
+    if (!body.scheduledAt) {
+      throw new ConflictException('scheduledAt is required.');
+    }
+
+    record.scheduledAt = new Date(body.scheduledAt);
+    record.status = 'queued';
+    await this.aiGenerationRepository.save(record);
+
+    await this.excelExportService.logCampaignAction(record);
+
+    return record;
+  }
+
+  // ─── GET /subjects/export ──────────────────────────────────────────────────
+  @Get('export/excel')
+  async exportExcel(
+    @Query('userId') userId: string,
+    @Res() res: Response,
+  ) {
+    if (!userId) {
+      throw new ConflictException('userId query parameter is required.');
+    }
+
+    const buffer = await this.excelExportService.generateExcelBuffer(userId);
+    
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="campaigns-${userId}.xlsx"`,
+      'Content-Length': buffer.length,
+    });
+    
+    res.end(buffer);
+  }
+
+  // ─── POST /subjects/:id/history ──────────────────────────────────────────────
+  @Post(':id/history')
+  async logHistory(
+    @Param('id') id: string,
+    @Body() body: { platform: string; userId?: string },
+  ) {
+    if (!body.platform) {
+      throw new ConflictException('platform is required.');
+    }
+    return this.sharingHistoryService.log({
+      contentId: id,
+      platform: body.platform,
+      userId: body.userId,
+    });
+  }
+
+  // ─── GET /subjects/:id/history ───────────────────────────────────────────────
+  @Get(':id/history')
+  async getHistory(@Param('id') id: string) {
+    return this.sharingHistoryService.findByContentId(id);
   }
 }

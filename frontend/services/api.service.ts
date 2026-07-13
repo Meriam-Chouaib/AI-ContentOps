@@ -139,3 +139,35 @@ export async function apiRequest<T>(
     throw error
   }
 }
+
+/**
+ * Downloads a file from the API using the same credential logic.
+ */
+export async function apiDownload(endpoint: string, filename: string): Promise<void> {
+  const url = `${ENV.apiUrl}${endpoint}`
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Failed to download file: ${response.status} ${errorText}`)
+    }
+
+    const blob = await response.blob()
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(downloadUrl)
+  } catch (error) {
+    console.error('Download error:', error)
+    throw error
+  }
+}

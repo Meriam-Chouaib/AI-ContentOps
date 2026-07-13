@@ -16,9 +16,18 @@ import {
   Save,
   RotateCcw,
   Wifi,
+  Download,
+  Send,
+  Calendar,
+
+  Video,
+  Copy,
 } from 'lucide-react'
+import { FaLinkedin as Linkedin, FaInstagram as Instagram, FaFacebook as Facebook, FaTiktok } from 'react-icons/fa';
+
 import { AiGeneration } from './types'
-import { apiRequest } from '@/services/api.service'
+import { apiRequest, apiDownload } from '@/services/api.service'
+import { ShareHistory, ShareEvent } from './ShareHistory'
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
@@ -216,6 +225,228 @@ function ArticlePanel({ content, campaignId, onSaved }: ArticlePanelProps) {
   )
 }
 
+// ─── Distribution Panel ────────────────────────────────────────────────────────
+
+interface DistributionPanelProps {
+  campaignId: string
+  onUpdate: (updated: AiGeneration) => void
+}
+
+function DistributionPanel({ campaignId, onUpdate }: DistributionPanelProps) {
+  const [mode, setMode] = useState<'idle' | 'scheduling' | 'platform-selection' | 'manual-copy'>('idle')
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('')
+  const [localCampaign, setLocalCampaign] = useState<AiGeneration | null>(null)
+  const [shareHistory, setShareHistory] = useState<ShareEvent[]>([])
+  const [loadingPlatform, setLoadingPlatform] = useState<string | null>(null)
+
+  // Fetch share history on mount
+  useEffect(() => {
+    apiRequest<ShareEvent[]>(`/subjects/${campaignId}/history`)
+      .then(setShareHistory)
+      .catch((err) => console.error('Failed to fetch share history', err))
+  }, [campaignId])
+
+  const handleShareClick = () => {
+    setMode('platform-selection')
+  }
+
+  const handlePlatformSelect = async (platform: string) => {
+    let contentToCopy = ''
+    if (localCampaign?.generatedContent) {
+      contentToCopy = localCampaign.generatedContent
+    } else {
+      try {
+        const fetched = await apiRequest<AiGeneration>(`/subjects/${campaignId}`)
+        contentToCopy = fetched.generatedContent || ''
+      } catch (e) { }
+    }
+
+    if (contentToCopy) {
+      await navigator.clipboard.writeText(contentToCopy)
+    }
+
+    const placeholderUrl = typeof window !== 'undefined' ? window.location.origin : 'https://example.com'
+    const encodedUrl = encodeURIComponent(placeholderUrl)
+
+    setLoadingPlatform(platform)
+    setErrorMsg(null)
+    try {
+      // 1. Mark as posted
+      const updated = await apiRequest<AiGeneration>(`/subjects/${campaignId}/post-now`, { method: 'POST' })
+      onUpdate(updated)
+
+      // 2. Log to sharing history
+      const newEvent = await apiRequest<ShareEvent>(`/subjects/${campaignId}/history`, {
+        method: 'POST',
+        body: { platform }
+      })
+      setShareHistory((prev) => [newEvent, ...prev])
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to post now.')
+    } finally {
+      setLoadingPlatform(null)
+    }
+
+    if (platform === 'LinkedIn') {
+      window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`, '_blank')
+    } else if (platform === 'Facebook') {
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, '_blank')
+    } else if (platform === 'TikTok') {
+      window.open('https://www.tiktok.com', '_blank')
+    } else {
+      window.open('https://www.instagram.com', '_blank')
+    }
+  }
+
+  const handleSchedule = async () => {
+    if (!scheduledAt) {
+      setErrorMsg('Please select a date and time.')
+      return
+    }
+    setIsSubmitting(true)
+    setErrorMsg(null)
+    setSuccessMsg(null)
+    try {
+      const updated = await apiRequest<AiGeneration>(`/subjects/${campaignId}/schedule`, {
+        method: 'POST',
+        body: { scheduledAt: new Date(scheduledAt).toISOString() }
+      })
+      onUpdate(updated)
+
+      const dateStr = new Date(scheduledAt).toLocaleDateString()
+      const timeStr = new Date(scheduledAt).toLocaleTimeString()
+      setSuccessMsg(`Content scheduled successfully, and the Excel record has been updated.`)
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to schedule.')
+    } finally {
+      setIsSubmitting(false)
+      setMode('idle')
+    }
+  }
+
+  return (
+    <div className="mx-6 mb-5 p-5 rounded-xl bg-slate-900 border border-white/[0.08] flex flex-col gap-4 shadow-inner">
+      <div className="flex items-center gap-2">
+        <Send className="w-4 h-4 text-violet-400" />
+        <span className="text-sm font-semibold text-white">Distribution Decision</span>
+      </div>
+
+      {successMsg && (
+        <div className="px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center shadow-sm">
+          <CheckCircle2 className="w-4 h-4 inline mr-2 shrink-0" />
+          <span className="font-medium leading-relaxed">{successMsg}</span>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300 flex items-center shadow-sm">
+          <AlertTriangle className="w-4 h-4 inline mr-2 shrink-0" />
+          <span className="font-medium leading-relaxed">{errorMsg}</span>
+        </div>
+      )}
+
+      {!successMsg && mode === 'idle' && (
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={handleShareClick}
+            disabled={isSubmitting}
+            className="flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition-all shadow-md disabled:opacity-50"
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            Share Now
+          </button>
+          <button
+            onClick={() => setMode('scheduling')}
+            disabled={isSubmitting}
+            className="flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-slate-200 text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
+          >
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            Schedule
+          </button>
+        </div>
+      )}
+
+      {/* Platform Selection — stays visible for multi-platform sharing */}
+      {!successMsg && mode === 'platform-selection' && (
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-between items-center px-1">
+            <span className="text-xs font-semibold text-slate-300">Select Platform</span>
+            <button onClick={() => setMode('idle')} className="text-[11px] text-slate-500 hover:text-slate-300">Done</button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { name: 'Facebook', icon: Facebook, color: 'text-blue-500 hover:bg-blue-500/10 border-blue-500/20' },
+              { name: 'LinkedIn', icon: Linkedin, color: 'text-sky-500 hover:bg-sky-500/10 border-sky-500/20' },
+              { name: 'Instagram', icon: Instagram, color: 'text-pink-500 hover:bg-pink-500/10 border-pink-500/20' },
+              { name: 'TikTok', icon: FaTiktok, color: 'text-slate-300 hover:bg-slate-300/10 border-slate-500/20' },
+            ].map((p) => {
+              const isLoading = loadingPlatform === p.name
+              const wasShared = shareHistory.some((e) => e.platform === p.name)
+              return (
+                <button
+                  key={p.name}
+                  onClick={() => handlePlatformSelect(p.name)}
+                  disabled={!!loadingPlatform}
+                  className={`relative flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-white/[0.02] border transition-all
+                    ${wasShared ? 'ring-1 ring-emerald-500/40 border-emerald-500/30' : ''}
+                    ${p.color}`}
+                >
+                  {wasShared && (
+                    <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-500/50" />
+                  )}
+                  {isLoading
+                    ? <Loader2 className="w-5 h-5 animate-spin" />
+                    : <p.icon className="w-5 h-5" />
+                  }
+                  <span className="text-[11px] font-medium">{p.name}</span>
+                </button>
+              )
+            })}
+          </div>
+          {/* Share history inline */}
+          <ShareHistory events={shareHistory} />
+        </div>
+      )}
+
+      {/* Manual Copy panel removed — platforms stay visible for multi-sharing */}
+
+      {/* Scheduling Input */}
+      {!successMsg && mode === 'scheduling' && (
+      <div className="flex flex-col gap-3">
+        <label className="text-xs text-slate-400 font-medium">Select Date & Time</label>
+        <input
+          type="datetime-local"
+          value={scheduledAt}
+          onChange={(e) => setScheduledAt(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-lg bg-black/40 border border-white/[0.12] text-white text-sm outline-none focus:border-violet-500/80 transition-colors shadow-inner"
+        />
+        <div className="flex gap-3 pt-1">
+          <button
+            onClick={() => setMode('idle')}
+            className="px-5 py-2.5 rounded-lg bg-white/[0.05] text-slate-300 text-xs font-semibold hover:bg-white/[0.1] transition-all shadow-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSchedule}
+            disabled={isSubmitting}
+            className="flex-1 flex justify-center items-center gap-2 py-2.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-500 transition-all shadow-md disabled:opacity-50"
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-3.5 h-3.5" />}
+            Confirm Schedule
+          </button>
+        </div>
+      </div>
+      )}
+
+    </div>
+  )
+}
+
 // ─── CampaignDetail Modal ───────────────────────────────────────────────────────
 
 export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: CampaignDetailProps) {
@@ -343,6 +574,17 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
                 />
               )}
 
+              {/* Has content and completed -> Show Distribution Decision */}
+              {localCampaign.status === 'completed' && (
+                <DistributionPanel
+                  campaignId={localCampaign.id}
+                  onUpdate={(updated) => {
+                    setLocalCampaign(updated)
+                    onSave?.(updated)
+                  }}
+                />
+              )}
+
               {/* Failed → error detail */}
               {localCampaign.status === 'failed' && localCampaign.errorMessage && (
                 <div className="flex-1 flex items-start p-8">
@@ -412,9 +654,18 @@ export function CampaignDetail({ campaign, onClose, onSave, isLivePolling }: Cam
 
           {/* ── Footer ── */}
           <div className="px-8 py-4 border-t border-white/[0.07] shrink-0 flex items-center justify-between">
-            <p className="text-xs text-slate-600">
-              Updated {new Date(localCampaign.updatedAt).toLocaleTimeString('en-GB')}
-            </p>
+            <div className="flex items-center gap-6">
+              <p className="text-xs text-slate-500 font-medium">
+                Updated {new Date(localCampaign.updatedAt).toLocaleTimeString('en-GB')}
+              </p>
+              <button
+                onClick={() => apiDownload(`/subjects/export/excel?userId=${localCampaign.userId}`, `content-log-${localCampaign.userId}.xlsx`)}
+                className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400/90 hover:text-emerald-300 transition-colors bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-md border border-emerald-500/20"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download Excel Log
+              </button>
+            </div>
             <button
               onClick={onClose}
               className="px-5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-sm text-slate-300 hover:text-white transition-all font-medium"

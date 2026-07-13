@@ -11,10 +11,13 @@ import { AiWorkerProcessor } from './ai-worker.processor';
 import { AiGeneration } from './entities/ai-generation.entity';
 import { PostingService } from './services/posting.service';
 import { SchedulerService } from './services/scheduler.service';
+import { ExcelExportService } from './services/excel-export.service';
+import { SharingHistory } from './entities/sharing-history.entity';
+import { SharingHistoryService } from './services/sharing-history.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AiGeneration]),
+    TypeOrmModule.forFeature([AiGeneration, SharingHistory]),
     BullModule.registerQueue({
       name: 'ai-generation',
     }),
@@ -36,6 +39,8 @@ import { SchedulerService } from './services/scheduler.service';
     AiWorkerProcessor,
     PostingService,
     SchedulerService,
+    ExcelExportService,
+    SharingHistoryService,
   ],
   exports: [AiProducerService],
 })
